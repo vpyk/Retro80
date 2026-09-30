@@ -107,7 +107,7 @@ sudo pacman -S --needed base-devel clang lld cmake ninja git autoconf automake l
 
 Префикс `/usr/GNUstep` нужен, потому что `CMakeLists.txt` пока ищет GNUstep только там. На этапе 1 поиск переводится на `gnustep-config`.
 
-Вместо ручной сборки можно взять `clang-build` из [tools-scripts](https://github.com/gnustep/tools-scripts), но сначала лучше собрать руками, чтобы зафиксировать нужные флаги.
+Всё это делает `scripts/build-gnustep.sh`: `scripts/build-gnustep.sh --deps` ставит зависимости и собирает GNUstep целиком, а `scripts/build-gnustep.sh base` пересобирает только libs-base. Версии компонентов зафиксированы на релизных тегах и меняются переменными окружения (`LIBS_GUI_REF=master` и т. п.). Порядок и флаги взяты из проверенного рецепта [plaurent/gnustep-build](https://github.com/plaurent/gnustep-build) (Ubuntu 24.04, раскладка gnustep); отличие — вместо ld.gold используется lld.
 
 **4. Окружение.** В Wayland-сессии (по умолчанию в KDE Plasma 6) приложение GNUstep работает через XWayland, коды клавиш там такие же, как в X11. Если появятся проблемы с окнами или вводом, проверить в X11-сессии.
 
