@@ -21,6 +21,48 @@
 
 @synthesize qwerty;
 
+#if defined(GNUSTEP) && !defined(_WIN32)
+
+// Таблицы kbdmap заданы в кодах клавиш macOS (kVK_*), а GNUstep на X11 отдаёт аппаратные
+// коды X11 (evdev: скан-код Linux + 8). Пары {код X11, код macOS} по положению клавиш.
+static const unsigned short x11KeyCodes[][2] = {
+	{9, 53},																// Esc
+	{67, 122}, {68, 120}, {69, 99}, {70, 118}, {71, 96}, {72, 97},			// F1-F6
+	{73, 98}, {74, 100}, {75, 101}, {76, 109}, {95, 103}, {96, 111},		// F7-F12
+	{49, 50}, {10, 18}, {11, 19}, {12, 20}, {13, 21}, {14, 23}, {15, 22},	// ` 1 2 3 4 5 6
+	{16, 26}, {17, 28}, {18, 25}, {19, 29}, {20, 27}, {21, 24}, {22, 51},	// 7 8 9 0 - = Backspace
+	{23, 48}, {24, 12}, {25, 13}, {26, 14}, {27, 15}, {28, 17}, {29, 16},	// Tab Q W E R T Y
+	{30, 32}, {31, 34}, {32, 31}, {33, 35}, {34, 33}, {35, 30}, {51, 42},	// U I O P [ ] Backslash
+	{38, 0}, {39, 1}, {40, 2}, {41, 3}, {42, 5}, {43, 4}, {44, 38},			// A S D F G H J
+	{45, 40}, {46, 37}, {47, 41}, {48, 39}, {36, 36},						// K L ; ' Return
+	{94, 10}, {52, 6}, {53, 7}, {54, 8}, {55, 9}, {56, 11}, {57, 45},		// <> Z X C V B N
+	{58, 46}, {59, 43}, {60, 47}, {61, 44}, {65, 49},						// M , . / Space
+	{110, 115}, {119, 117}, {104, 76},										// Home Delete KP_Enter
+	{113, 123}, {114, 124}, {116, 125}, {111, 126},							// ← → ↓ ↑
+};
+
+#endif
+
+// Код клавиши в кодах macOS
+static unsigned short macKeyCode(NSEvent *event)
+{
+	unsigned short keyCode = event.keyCode;
+
+#if defined(GNUSTEP) && !defined(_WIN32)
+	if (keyCode > 0xFF)
+		return keyCode;
+
+	for (size_t i = 0; i < sizeof(x11KeyCodes)/sizeof(x11KeyCodes[0]); i++)
+		if (x11KeyCodes[i][0] == keyCode)
+			return x11KeyCodes[i][1];
+
+	// Остальные клавиши не совпадают ни с одним кодом macOS из kbdmap
+	return 0x100 | keyCode;
+#else
+	return keyCode;
+#endif
+}
+
 - (void)flagsChanged:(NSEvent *)theEvent
 {
 	if ((theEvent.modifierFlags & NSEventModifierFlagCommand) == 0)
@@ -65,7 +107,7 @@
 
 					if (index < 72)
 					{
-						keyboard[index] = theEvent.keyCode + 1; paste = nil;
+						keyboard[index] = macKeyCode(theEvent) + 1; paste = nil;
 					}
 				}
 
@@ -75,19 +117,19 @@
 
 					if (index < 72)
 					{
-						keyboard[index] = theEvent.keyCode + 1; paste = nil;
+						keyboard[index] = macKeyCode(theEvent) + 1; paste = nil;
 					}
 				}
 			}
 		}
 
-		else if ((index = [kbdmap indexOfObject:@(theEvent.keyCode)]) != NSNotFound)
+		else if ((index = [kbdmap indexOfObject:@(macKeyCode(theEvent))]) != NSNotFound)
 		{
 			modifierFlags = theEvent.modifierFlags;
 
 			if (index < 72)
 			{
-				keyboard[index] = theEvent.keyCode + 1; paste = nil;
+				keyboard[index] = macKeyCode(theEvent) + 1; paste = nil;
 			}
 		}
 	}
@@ -100,7 +142,7 @@
 
 	@synchronized (self)
 	{
-		unsigned short keyCode = theEvent.keyCode + 1;
+		unsigned short keyCode = macKeyCode(theEvent) + 1;
 
 		if (keyCode)
 		{
