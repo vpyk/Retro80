@@ -29,6 +29,10 @@ LIBS_BACK_REF=${LIBS_BACK_REF:-back-0_32_0}
 
 RUNTIME_ABI=gnustep-2.2
 
+# clang 22 считает -Wincompatible-pointer-types ошибкой, а тесты configure в libs-base 1.31.1
+# (и, возможно, код библиотек) на это не рассчитаны. Возвращаем диагностике статус предупреждения.
+COMPAT_CFLAGS="-Wno-error=incompatible-pointer-types"
+
 PREFIX=/usr/GNUstep
 SRC="$HOME/src/gnustep"
 JOBS=$(nproc)
@@ -281,6 +285,8 @@ build_lib()
 
 	(
 		cd "$SRC/$dir"
+		export CFLAGS="${CFLAGS:--g -O2} $COMPAT_CFLAGS"
+		export OBJCFLAGS="${OBJCFLAGS:-} $COMPAT_CFLAGS"
 		./configure
 		make -j "$JOBS"
 		as_root make GNUSTEP_INSTALLATION_DOMAIN=SYSTEM install
