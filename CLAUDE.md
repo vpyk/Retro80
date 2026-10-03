@@ -10,21 +10,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 There are no tests or linters. Builds use `-Werror`, so any warning breaks the build.
 
-Three build systems exist and **must be kept in sync when adding/removing source or resource files**:
-- `CMakeLists.txt` (source lists grouped as `RETRO80_*_SOURCES`, resources in `RETRO80_GLOBAL_RESOURCES`)
-- `Retro80/GNUmakefile` (GNUstep make)
-- `Retro80.xcodeproj` (Xcode; also contains the `QLRetro80` QuickLook plugin target)
+Two build systems exist and **must be kept in sync when adding/removing source files**:
+- `CMakeLists.txt` (source lists grouped as `RETRO80_*_SOURCES`; ROM images are picked up by glob from `Retro80/ROM/`, other resources listed in `RETRO80_GLOBAL_RESOURCES`)
+- `Retro80.xcodeproj` (Xcode; also contains the `QLRetro80` QuickLook plugin target; ROMs are listed explicitly there)
 
 ```sh
-# macOS or GNUstep (CMake)
-cmake -B build -DCMAKE_BUILD_TYPE=Debug     # Debug defines DEBUG
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug     # Debug defines DEBUG
 cmake --build build
-
-# GNUstep only: must use clang, with GNUstep built against libobjc2 (gnustep-2.2 ABI)
-export CC=clang CXX=clang++
+./build/Retro80.app/Retro80                          # GNUstep; on macOS it is a regular .app bundle
+sudo cmake --install build                           # GNUstep: installs Retro80.app into GNUSTEP_LOCAL_APPS
 ```
 
-On non-Apple platforms CMake defines `GNUSTEP`, uses `GNUstep-Prefix.pch` (which shims missing Cocoa APIs such as `NSMenuItemValidation`, `NSMenuItem.hidden`), and swaps `Sound.m` for `GNUstep-Sound.m` + `GNUstep-Stub.m`. Platform-specific code is guarded with `#ifdef GNUSTEP`. GNUstep limitations: no sound/WAV, QWERTY keyboard mode only, 86RKSD file names must be uppercase.
+GNUstep itself (libobjc2 + libdispatch, gnustep-2.2 ABI, ARC; distro packages won't work) is built from source by `scripts/build-gnustep.sh` into `/usr/GNUstep` (Arch/Manjaro and Debian/Ubuntu; `--deps` installs build dependencies, component names rebuild selectively). On non-Apple platforms CMake locates GNUstep via `gnustep-config`, defaults the compiler to clang and the linker to lld, takes the runtime ABI from `gnustep-config --objc-flags`, defines `GNUSTEP`, uses `GNUstep-Prefix.pch` (which shims missing Cocoa APIs such as `NSMenuItemValidation`, `NSMenuItem.hidden`), and swaps `Sound.m` for `GNUstep-Sound.m` + `GNUstep-Stub.m`. Platform-specific code is guarded with `#ifdef GNUSTEP`. GNUstep limitations: no sound/WAV, QWERTY keyboard mode only, 86RKSD file names must be uppercase, menu items that are hidden on macOS show up disabled. Work plan for the GNUstep/Windows port: `GNUstep-plan.md`.
 
 ## Architecture
 
@@ -44,4 +41,4 @@ All sources are flat in `Retro80/`; ROM images are in `Retro80/ROM/` and loaded 
 
 **Chip emulations:** `x8080` (CPU, also Z80 mode), `Dbg80` (disassembler/debugger), `x8253` (ВИ53 timer/sound), `x8255` (ВВ55 PPI), `x8257` (ВТ57 DMA), `x8275` (ВГ75 CRT controller), `vg93` (ВГ93 floppy controller).
 
-**Factories / menu tags:** `ComputerFactory` holds an ordered list of per-family factories (`Radio86RKFactory`, `Micro80Factory`, `SpecialistFactory`, `Orion128Factory`). A "New" menu item tag encodes `(factoryIndex+1)*100 + machineTag`, dispatched to the family factory's `computerByTag:`. Adding a new machine means: a factory case, a menu item in `ru.lproj/MainMenu.xib` with the matching tag, file extensions in the factory (and `Retro80-Info.plist` document types), plus entries in all three build files. Machine option menus are handled via `validateMenuItem:` switching on `menuItem.tag`.
+**Factories / menu tags:** `ComputerFactory` holds an ordered list of per-family factories (`Radio86RKFactory`, `Micro80Factory`, `SpecialistFactory`, `Orion128Factory`). A "New" menu item tag encodes `(factoryIndex+1)*100 + machineTag`, dispatched to the family factory's `computerByTag:`. Adding a new machine means: a factory case, a menu item in `ru.lproj/MainMenu.xib` with the matching tag, file extensions in the factory (and `Retro80-Info.plist` document types), plus entries in both build files. Machine option menus are handled via `validateMenuItem:` switching on `menuItem.tag`.

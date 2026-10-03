@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
+
+# GNUstep с libobjc2 собирается только clang
+if(NOT CMAKE_HOST_APPLE AND NOT CMAKE_OBJC_COMPILER AND NOT DEFINED ENV{OBJC})
+	set(CMAKE_OBJC_COMPILER clang)
+endif()
+
 project(Retro80 VERSION 0.92 LANGUAGES OBJC)
 
 set(CMAKE_OBJC_STANDARD 99)
@@ -7,26 +13,55 @@ add_compile_options(-Werror -fobjc-arc -fmodules)
 
 if(NOT APPLE)
 
-	find_path(GNUSTEP_HEADERS Cocoa/Cocoa.h
-			PATHS
-			/usr/GNUstep/System/Library/Headers
-			/usr/GNUstep/Local/Library/Headers
-			/include/GNUstep
+	find_program(GNUSTEP_CONFIG gnustep-config
+			HINTS ENV GNUSTEP_SYSTEM_TOOLS
+			PATHS /usr/GNUstep/System/Tools /usr/GNUstep/Local/Tools
 			REQUIRED)
 
-	include_directories(${GNUSTEP_HEADERS})
+	function(gnustep_variable name)
+		execute_process(
+				COMMAND ${GNUSTEP_CONFIG} --variable=${name}
+				OUTPUT_VARIABLE value
+				OUTPUT_STRIP_TRAILING_WHITESPACE
+				COMMAND_ERROR_IS_FATAL ANY)
+		set(${name} ${value} PARENT_SCOPE)
+	endfunction()
 
-	find_path(GNUSTEP_LIBRARIES gnustep-gui
-			PATHS
-			/usr/GNUstep/System/Library/Libraries
-			/usr/GNUstep/Local/Library/Libraries
-			/lib/GNUstep
-			REQUIRED)
+	gnustep_variable(GNUSTEP_SYSTEM_HEADERS)
+	gnustep_variable(GNUSTEP_LOCAL_HEADERS)
+	gnustep_variable(GNUSTEP_SYSTEM_LIBRARIES)
+	gnustep_variable(GNUSTEP_LOCAL_LIBRARIES)
+	gnustep_variable(GNUSTEP_SYSTEM_TOOLS)
+	gnustep_variable(GNUSTEP_LOCAL_APPS)
 
-	link_directories(${GNUSTEP_LIBRARIES})
+	include_directories(${GNUSTEP_LOCAL_HEADERS} ${GNUSTEP_SYSTEM_HEADERS})
+	link_directories(${GNUSTEP_LOCAL_LIBRARIES} ${GNUSTEP_SYSTEM_LIBRARIES})
 
-	add_compile_options(-fobjc-runtime=gnustep-2.2 -fblocks)
+	# ABI рантайма берётся из настроек gnustep-make, чтобы совпадать с собранными библиотеками
+	execute_process(
+			COMMAND ${GNUSTEP_CONFIG} --objc-flags
+			OUTPUT_VARIABLE GNUSTEP_OBJC_FLAGS
+			COMMAND_ERROR_IS_FATAL ANY)
+
+	if(GNUSTEP_OBJC_FLAGS MATCHES "-fobjc-runtime=([^ \n]+)")
+		set(GNUSTEP_RUNTIME_ABI ${CMAKE_MATCH_1})
+	else()
+		set(GNUSTEP_RUNTIME_ABI gnustep-2.2)
+	endif()
+
+	message(STATUS "GNUstep: ${GNUSTEP_CONFIG}, runtime ${GNUSTEP_RUNTIME_ABI}")
+
+	add_compile_options(-fobjc-runtime=${GNUSTEP_RUNTIME_ABI} -fblocks)
 	add_compile_definitions(GNUSTEP)
+
+	# Новый ABI libobjc2 надёжнее всего линкуется lld
+	find_program(LLD_LINKER ld.lld)
+
+	if(LLD_LINKER)
+		add_link_options(-fuse-ld=lld)
+	endif()
+
+	find_program(PLMERGE plmerge HINTS ${GNUSTEP_SYSTEM_TOOLS} REQUIRED)
 
 endif()
 
@@ -175,40 +210,11 @@ set(RETRO80_SOURCES
 		${RETRO80_ORION_SOURCES}
         Retro80/main.m)
 
+file(GLOB RETRO80_ROM_RESOURCES CONFIGURE_DEPENDS Retro80/ROM/*)
+
 set(RETRO80_GLOBAL_RESOURCES
         Retro80.icns
-        Retro80/ROM/Apogeo.bin
-        Retro80/ROM/Basic.bin
-        Retro80/ROM/Lik.bin
-        Retro80/ROM/M3-EXT-1.3.rom
-        Retro80/ROM/M80RK86.bin
-        Retro80/ROM/Micro80.bin
-        Retro80/ROM/Micro80.fnt
-        Retro80/ROM/Microsha.bin
-        Retro80/ROM/ORDOS-2.40.rom
-        Retro80/ROM/ORDOS-4.03.rom
-        Retro80/ROM/Orion128-1.bin
-        Retro80/ROM/Orion128-2.bin
-        Retro80/ROM/Orion128-3.1.bin
-        Retro80/ROM/Orion128-3.2.bin
-        Retro80/ROM/Orion128-3.3.bin
-        Retro80/ROM/Partner.bin
-        Retro80/ROM/Radio86RK.bin
-        Retro80/ROM/SYMGEN.BIN
-        Retro80/ROM/Specialist-2.7.bin
-        Retro80/ROM/Specialist-3.3.bin
-        Retro80/ROM/Specialist1.bin
-        Retro80/ROM/Specialist2.bin
-        Retro80/ROM/Specialist2SD.bin
-        Retro80/ROM/SpecialistMX2.bin
-        Retro80/ROM/SpecialistMX_Commander.bin
-        Retro80/ROM/SpecialistMX_RAMFOS.bin
-        Retro80/ROM/SpecialistSP580.bin
-        Retro80/ROM/UT88-0.bin
-        Retro80/ROM/UT88-F.bin
-        Retro80/ROM/dos29.bin
-        Retro80/ROM/fdd.bin
-        Retro80/ROM/mcpg.bin
+        ${RETRO80_ROM_RESOURCES}
         Retro80/digits.png
         Retro80/tvnoise.fs
         Retro80/tvnoise.vs)
@@ -245,12 +251,18 @@ else()
 	target_precompile_headers(Retro80 PRIVATE Retro80/GNUstep-Prefix.pch)
 	target_link_libraries(Retro80 objc dispatch gnustep-base gnustep-gui GL GLU m)
 
+	# Бандл приложения GNUstep: Retro80.app/Retro80 + Retro80.app/Resources
+	set(RETRO80_APP_DIR ${CMAKE_CURRENT_BINARY_DIR}/Retro80.app)
+	set_target_properties(Retro80 PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${RETRO80_APP_DIR})
+
 	add_custom_command(
 			TARGET Retro80 POST_BUILD
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-			COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/Resources
-			COMMAND ${CMAKE_COMMAND} -E copy ${RETRO80_RESOURCES} ${CMAKE_CURRENT_BINARY_DIR}/Resources
-			COMMAND plmerge ${CMAKE_CURRENT_BINARY_DIR}/Resources/Info-gnustep.plist Retro80/Retro80-Info.plist
+			COMMAND ${CMAKE_COMMAND} -E make_directory ${RETRO80_APP_DIR}/Resources
+			COMMAND ${CMAKE_COMMAND} -E copy ${RETRO80_RESOURCES} ${RETRO80_APP_DIR}/Resources
+			COMMAND ${PLMERGE} ${RETRO80_APP_DIR}/Resources/Info-gnustep.plist Retro80/Retro80-Info.plist
 	)
+
+	install(DIRECTORY ${RETRO80_APP_DIR} DESTINATION ${GNUSTEP_LOCAL_APPS} USE_SOURCE_PERMISSIONS)
 
 endif()
