@@ -79,16 +79,26 @@
 * [РУС/ЛАТ] — **[Option ⌥]** или **[Capslock ⇪]** для Микро-80/ЮТ-88
 
 ## Сборка под GNUstep
-* GNUstep не умеет скрывать пункты меню и работать с альтернативными, отдельное меню не делалось, поэтому выглядит не очень.
-* В эмуляции 86RKSD файлы и каталоги должны быть названы заглавными буквами.
-* Пока не реализован звук и работа с WAV файлами.
-* Клавиатура работает только в режиме «QWERTY».
+Под Linux поддерживаются звук, магнитофон (воспроизведение и запись WAV), ROM-диски и SD-карта 86RKSD, оба режима клавиатуры.
+* GNUstep не умеет скрывать пункты меню и работать с альтернативными, отдельное меню не делалось. Поэтому в меню видны пункты всех машин, но неподходящие недоступны; альтернативные пункты («Старт с F800», «Системный ROM-диск» и т.п.) показываются как обычные.
+* Сочетания клавиш со стрелками (перемотка магнитофона) в меню не отображаются, но работают.
+* По умолчанию меню показывается отдельным окном в стиле NeXTSTEP. Меню внутри окна эмулятора: `defaults write Retro80 NSMenuInterfaceStyle NSWindows95InterfaceStyle`.
 
-GNUstep необходимо собрать самостоятельно, так как в большинстве дистрибутивов он собран с использованием устаревшей версии библиотеки libobj.
-Собирать только с помощью clang (export CC=clang CXX=clang++):
-* [libobjc2](https://github.com/gnustep/libobjc2)
-* [libdispatch](https://github.com/swiftlang/swift-corelibs-libdispatch)
-* [tools-make](https://github.com/gnustep/tools-make) --with-runtime-abi=gnustep-2.2 --enable-objc-arc
-* [libs-base](https://github.com/gnustep/libs-base)
-* [libs-gui](https://github.com/gnustep/libs-gui)
-* [libs-back](https://github.com/gnustep/libs-back)
+Клавиши под GNUstep:
+* ⌘ — левый **[Alt]**, ⌥ — правый **[Alt]** (настройки GNUstep `GSFirstCommandKey` и `GSFirstAlternateKey`). Например, отладчик ⌘D — левый Alt+D, Reset ⌘R — левый Alt+R, запись на магнитофон ⌥⌘R — оба Alt+R.
+* [РУС/ЛАТ] — правый **[Alt]** или **[Capslock]** для Микро-80/ЮТ-88, [ПС] — **[Enter]** на цифровой клавиатуре, [СТР] — **[Delete]**, [↖] — **[Home]**.
+
+GNUstep необходимо собрать самостоятельно, так как в большинстве дистрибутивов он собран с использованием устаревшей версии рантайма Objective-C.
+Для Arch/Manjaro и Debian/Ubuntu это делает скрипт: он ставит зависимости (`--deps`) и собирает clang'ом в `/usr/GNUstep`
+[libobjc2](https://github.com/gnustep/libobjc2), [libdispatch](https://github.com/swiftlang/swift-corelibs-libdispatch), [tools-make](https://github.com/gnustep/tools-make), [libs-base](https://github.com/gnustep/libs-base), [libs-gui](https://github.com/gnustep/libs-gui) и [libs-back](https://github.com/gnustep/libs-back)
+(версии и флаги — в самом скрипте; проверено на Manjaro с clang 22). Пакеты GNUstep из репозиториев дистрибутива нужно удалить.
+
+```sh
+scripts/build-gnustep.sh --deps
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+./build/Retro80.app/Retro80
+```
+
+При первой конфигурации CMake скачивает [miniaudio](https://miniaud.io) для звука. Установка в `/usr/GNUstep/Local/Applications`: `sudo cmake --install build`.
+После обновления системных библиотек (например, ICU) может понадобиться пересобрать часть GNUstep: `scripts/build-gnustep.sh base gui back`.
