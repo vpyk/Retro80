@@ -33,8 +33,10 @@ static const void *hiddenKey = &hiddenKey;
 
 @implementation MenuHider
 {
+	NSMenu *managedMenu;
 	NSArray<NSMenuItem *> *items;
 	BOOL updating;
+	BOOL scheduled;
 }
 
 // NSMenu не удерживает делегата
@@ -68,12 +70,27 @@ static NSMutableArray<MenuHider *> *hiders;
 	// Копия: в GNUstep itemArray — это сам изменяемый массив пунктов меню
 	MenuHider *hider = [[MenuHider alloc] init];
 	hider->items = [menu.itemArray copy];
+	hider->managedMenu = menu;
 
 	if (hiders == nil)
+	{
 		hiders = [NSMutableArray array];
+
+		// Состав меню, а с ним и сочетания клавиш, должен следовать за текущей машиной,
+		// даже если меню не открывали
+		NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+		[center addObserver:self selector:@selector(windowDidChange:) name:NSWindowDidBecomeKeyNotification object:nil];
+		[center addObserver:self selector:@selector(windowDidChange:) name:NSWindowDidBecomeMainNotification object:nil];
+	}
 
 	[hiders addObject:hider];
 	menu.delegate = hider;
+}
+
++ (void)windowDidChange:(NSNotification *)notification
+{
+	for (MenuHider *hider in hiders)
+		[hider scheduleUpdate];
 }
 
 // Все пункты меню, включая убранные из него
@@ -112,18 +129,62 @@ static BOOL isHidden(NSMenuItem *item)
 	return item.hidden;
 }
 
-- (void)menuNeedsUpdate:(NSMenu *)menu
+// Показано ли меню (внутренний метод GNUstep; если его нет, считаем показанным)
+static BOOL isVisible(NSMenu *menu)
+{
+	SEL selector = NSSelectorFromString(@"_isVisible");
+
+	if (![menu respondsToSelector:selector])
+		return YES;
+
+	BOOL (*imp)(id, SEL) = (BOOL (*)(id, SEL)) [menu methodForSelector:selector];
+	return imp(menu, selector);
+}
+
+// GNUstep вызывает этот метод из -[NSMenu update]. Для показанного меню перестраивать его
+// можно сразу. Скрытое меню обновляется из -[NSMenu performKeyEquivalent:], который
+// запоминает число пунктов до обновления и перебирает их после: там меню менять нельзя,
+// перестройка откладывается до следующего прохода цикла событий.
+- (void)menuNeedsUpdate:(NSMenu *)aMenu
+{
+	if (isVisible(aMenu))
+		[self updateNow];
+	else
+		[self scheduleUpdate];
+}
+
+- (void)scheduleUpdate
+{
+	if (scheduled)
+		return;
+
+	scheduled = YES;
+
+	// Не в NSEventTrackingRunLoopMode: пока пользователь ведёт мышью по меню, оно не меняется
+	[self performSelector:@selector(scheduledUpdate)
+			   withObject:nil
+			   afterDelay:0
+				  inModes:@[NSDefaultRunLoopMode, NSModalPanelRunLoopMode]];
+}
+
+- (void)scheduledUpdate
+{
+	scheduled = NO;
+	[self updateNow];
+}
+
+- (void)updateNow
 {
 	// Изменение меню в GNUstep само может вызвать его обновление, а с ним и этот метод
 	if (updating)
 		return;
 
 	updating = YES;
-	[self updateMenu:menu];
+	[self updateMenu];
 	updating = NO;
 }
 
-- (void)updateMenu:(NSMenu *)menu
+- (void)updateMenu
 {
 	NSMutableArray<NSMenuItem *> *visible = [NSMutableArray arrayWithCapacity:items.count];
 
@@ -143,19 +204,19 @@ static BOOL isHidden(NSMenuItem *item)
 	while (visible.lastObject.isSeparatorItem)
 		[visible removeLastObject];
 
-	if ([visible isEqualToArray:menu.itemArray])
+	if ([visible isEqualToArray:managedMenu.itemArray])
 		return;
 
 	// Уведомления об изменении меню — одним разом после перестройки, как в -[NSMenu update]
-	[menu setMenuChangedMessagesEnabled:NO];
+	[managedMenu setMenuChangedMessagesEnabled:NO];
 
-	while (menu.numberOfItems)
-		[menu removeItemAtIndex:menu.numberOfItems - 1];
+	while (managedMenu.numberOfItems)
+		[managedMenu removeItemAtIndex:managedMenu.numberOfItems - 1];
 
 	for (NSMenuItem *item in visible)
-		[menu addItem:item];
+		[managedMenu addItem:item];
 
-	[menu setMenuChangedMessagesEnabled:YES];
+	[managedMenu setMenuChangedMessagesEnabled:YES];
 }
 
 @end
