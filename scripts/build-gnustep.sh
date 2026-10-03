@@ -271,11 +271,13 @@ build_libobjc2()
 # build_lib <каталог> <url> <ref>: libs-base, libs-gui, libs-back
 build_lib()
 {
+	# До объявления переменных: GNUstep.sh делает unset dir, path_fragment и др.
+	load_gnustep_env
+
 	local dir=$1 url=$2 ref=$3
 
 	step "$dir ($ref)"
 	fetch "$dir" "$url" "$ref"
-	load_gnustep_env
 
 	(
 		cd "$SRC/$dir"
