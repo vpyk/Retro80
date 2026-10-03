@@ -11,8 +11,65 @@
 
 @implementation RKSDCard
 {
-	NSDirectoryEnumerator *directoryEnumerator;
+	NSString *directoryPath;
+	NSArray<NSString *> *directoryContents;
+	NSUInteger directoryIndex;
+
 	NSFileHandle *file, *file2;
+}
+
+// Путь к файлу на SD-карте. Программы запрашивают имена в верхнем регистре, поэтому на файловых
+// системах с учётом регистра каждый компонент пути, которого нет в точности, ищется без учёта регистра.
+// Не найденные компоненты остаются как есть: так создаются новые файлы и каталоги.
+static NSString *resolvePath(NSString *root, NSString *name)
+{
+	if (root == nil || name == nil)
+		return nil;
+
+	NSFileManager *fileManager = [NSFileManager defaultManager];
+	NSMutableArray<NSString *> *components = [NSMutableArray array];
+	BOOL exists = YES;
+
+	for (NSString *component in [name componentsSeparatedByString:@"/"])
+	{
+		if (component.length == 0 || [component isEqualToString:@"."])
+			continue;
+
+		if ([component isEqualToString:@".."])
+		{
+			if (components.count)
+				[components removeLastObject];
+
+			continue;
+		}
+
+		NSString *directory = [root stringByAppendingPathComponent:[components componentsJoinedByString:@"/"]];
+		NSString *found = component;
+
+		if (exists && ![fileManager fileExistsAtPath:[directory stringByAppendingPathComponent:component]])
+		{
+			found = nil;
+
+			for (NSString *item in [fileManager contentsOfDirectoryAtPath:directory error:NULL])
+			{
+				if ([item caseInsensitiveCompare:component] == NSOrderedSame)
+				{
+					found = item;
+					break;
+				}
+			}
+
+			if (found == nil)
+			{
+				found = component;
+				exists = NO;
+			}
+		}
+
+		[components addObject:found];
+	}
+
+	return [root stringByAppendingPathComponent:[components componentsJoinedByString:@"/"]];
 }
 
 - (NSString *)sdbiosrk
@@ -27,12 +84,14 @@
 
 - (BOOL)validateDirectory:(NSURL *)url error:(NSError **)outError
 {
-	return [[NSFileManager defaultManager] fileExistsAtPath:[[NSURL URLWithString:self.bootrk relativeToURL:url] path]];
+	return [[NSFileManager defaultManager] fileExistsAtPath:resolvePath(url.path, self.bootrk)];
 }
 
 - (void)setURL:(NSURL *)url
 {
-	if ((rom = [NSData dataWithContentsOfFile:[[[NSURL URLWithString:self.bootrk relativeToURL:url] path] stringByResolvingSymlinksInPath]]) != nil)
+	NSString *bootrk = resolvePath(url.path, self.bootrk);
+
+	if (bootrk && (rom = [NSData dataWithContentsOfFile:bootrk.stringByResolvingSymlinksInPath]) != nil)
 	{
 		if ((B & 0x7F) < rom.length)
 			[rom getBytes:&out range:NSMakeRange(B & 0x7F, 1)];
@@ -222,8 +281,8 @@ static NSString *stringFromPointer(const void *ptr)
 // Команда 0 - cmd_boot()
 - (uint8_t)cmd_boot
 {
-	NSFileHandle *fileHandle = [NSFileHandle fileHandleForReadingAtPath:[NSURL URLWithString:self.sdbiosrk
-																			   relativeToURL:URL].path];
+	NSString *path = resolvePath(URL.path, self.sdbiosrk);
+	NSFileHandle *fileHandle = path ? [NSFileHandle fileHandleForReadingAtPath:path] : nil;
 
 	return fileHandle == nil ? ERR_NO_PATH : [self sendRKFileHandle:fileHandle];
 }
@@ -241,8 +300,8 @@ static NSString *stringFromPointer(const void *ptr)
 	if (request[pos - 1])
 		return ERR_OK;
 
-	NSFileHandle *fileHandle = [NSFileHandle fileHandleForReadingAtPath:[NSURL URLWithString:stringFromPointer(request + 1)
-																			   relativeToURL:URL].path];
+	NSString *path = resolvePath(URL.path, stringFromPointer(request + 1));
+	NSFileHandle *fileHandle = path ? [NSFileHandle fileHandleForReadingAtPath:path] : nil;
 
 	return fileHandle == nil ? ERR_NO_PATH : [self sendRKFileHandle:fileHandle];
 }
@@ -253,24 +312,27 @@ static NSString *stringFromPointer(const void *ptr)
 	if (pos < 4 || request[pos - 3])
 		return ERR_OK;
 
+	NSFileManager *fileManager = [NSFileManager defaultManager];
+
+	// ':' - продолжить поиск в том же каталоге
 	if (request[1] != ':')
-        directoryEnumerator = [[NSFileManager defaultManager] enumeratorAtURL:[NSURL URLWithString:stringFromPointer(request + 1) relativeToURL:URL]
-                                                   includingPropertiesForKeys:@[NSURLIsDirectoryKey, NSURLFileSizeKey, NSURLAttributeModificationDateKey]
-                                                                      options:NSDirectoryEnumerationSkipsSubdirectoryDescendants
-                                                                 errorHandler:nil];
-	if (directoryEnumerator == nil)
+	{
+		directoryPath = resolvePath(URL.path, stringFromPointer(request + 1));
+		directoryContents = directoryPath ? [[fileManager contentsOfDirectoryAtPath:directoryPath error:NULL]
+			sortedArrayUsingSelector:@selector(caseInsensitiveCompare:)] : nil;
+		directoryIndex = 0;
+	}
+
+	if (directoryContents == nil)
 		return ERR_NO_PATH;
 
 	unsigned count = (request[pos - 1] << 8) | request[pos - 2];
 	buffer = [NSMutableData dataWithCapacity:count * 21 + 1];
 
-	for (id object; count && (object = [directoryEnumerator nextObject]) != nil; --count)
+	for (; count && directoryIndex < directoryContents.count; directoryIndex++)
 	{
-		#ifndef GNUSTEP
-    		NSString* fullName = [(NSURL*)object path].lastPathComponent.uppercaseString;
-        #else
-    		NSString* fullName = [object uppercaseString];
-		#endif
+		NSString *name = directoryContents[directoryIndex];
+		NSString *fullName = name.uppercaseString;
 
 		NSString* fileName = fullName.stringByDeletingPathExtension;
 		NSString* fileExt = fullName.pathExtension;
@@ -296,12 +358,16 @@ static NSString *stringFromPointer(const void *ptr)
 
         memcpy(fileinfo + 9, ptr, size);
 
-#ifndef GNUSTEP
-		NSNumber *value;
-		if ([(NSURL*)object getResourceValue:&value forKey:NSURLIsDirectoryKey error:NULL] && value.boolValue)
-#else
-        if (directoryEnumerator.fileAttributes.fileType == NSFileTypeDirectory)
-#endif
+		NSString *path = [directoryPath stringByAppendingPathComponent:name];
+		NSDictionary *attributes = [fileManager attributesOfItemAtPath:path error:NULL];
+
+		if ([attributes.fileType isEqualToString:NSFileTypeSymbolicLink])
+			attributes = [fileManager attributesOfItemAtPath:path.stringByResolvingSymlinksInPath error:NULL];
+
+		if (attributes == nil)
+			continue;
+
+		if ([attributes.fileType isEqualToString:NSFileTypeDirectory])
 		{
 			fileinfo[12] = 0x10;
 			fileinfo[13] = 0x00;
@@ -311,12 +377,7 @@ static NSString *stringFromPointer(const void *ptr)
 		}
 		else
 		{
-#ifndef GNUSTEP
-            [(NSURL*)object getResourceValue:&value forKey:NSURLFileSizeKey error:NULL];
-            uint32_t fileSize = value.unsignedIntValue;
-#else
-            uint32_t fileSize = (uint32_t) directoryEnumerator.fileAttributes.fileSize;
-#endif
+            uint32_t fileSize = (uint32_t) attributes.fileSize;
 
 			fileinfo[12] = 0x00;
 			fileinfo[13] = (uint8_t) fileSize;
@@ -325,12 +386,8 @@ static NSString *stringFromPointer(const void *ptr)
 			fileinfo[16] = (uint8_t) (fileSize >> 24);
 		}
 
-		NSDate *creationDate;
-#ifndef GNUSTEP
-		[(NSURL*)object getResourceValue:&creationDate forKey:NSURLCreationDateKey error:NULL];
-#else
-		creationDate = [directoryEnumerator.fileAttributes fileCreationDate];
-#endif
+		// Дата создания есть не на всех файловых системах
+		NSDate *creationDate = attributes.fileCreationDate ?: attributes.fileModificationDate ?: [NSDate date];
 
         NSDateComponents *dateComponents = [[NSCalendar currentCalendar]
 				components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond
@@ -347,14 +404,15 @@ static NSString *stringFromPointer(const void *ptr)
 		fileinfo[20] = (uint8_t) (dosDate >> 8);
 
 		[buffer appendBytes:fileinfo length:21];
+		--count;
 	}
 
 	uint8_t err = ERR_OK_CMD;
 
-	if (count)
-		directoryEnumerator = nil;
-	else
+	if (directoryIndex < directoryContents.count)
 		err = ERR_MAX_FILES;
+	else
+		directoryContents = nil;
 
 	[buffer appendBytes:&err length:1];
 	return ERR_OK;
@@ -366,7 +424,16 @@ static NSString *stringFromPointer(const void *ptr)
 	if (pos < 3 || request[pos - 1])
 		return ERR_OK;
 
-	NSString* path = [[NSURL URLWithString:stringFromPointer(request + 2) relativeToURL:URL] path];
+	if (request[1] == 101)	// O_SWAP
+	{
+		NSFileHandle *swap = file; file = file2; file2 = swap;
+		return ERR_OK_CMD;
+	}
+
+	NSString* path = resolvePath(URL.path, stringFromPointer(request + 2));
+
+	if (path == nil)
+		return ERR_NO_PATH;
 
 	switch (request[1])
 	{
@@ -412,12 +479,6 @@ static NSString *stringFromPointer(const void *ptr)
 				return ERR_DISK_ERR;
 			else
 				return ERR_OK_CMD;
-		}
-
-		case 101:	// O_SWAP:
-		{
-			NSFileHandle *swap = file; file = file2; file2 = swap;
-			return ERR_OK_CMD;
 		}
 
 		default:
@@ -554,7 +615,10 @@ static NSString *stringFromPointer(const void *ptr)
 	if (pos < 3 || request[pos - 1])
 		return ERR_OK;
 
-	NSString *from = [[NSURL URLWithString:stringFromPointer(request + 1) relativeToURL:URL] path];
+	NSString *from = resolvePath(URL.path, stringFromPointer(request + 1));
+
+	if (from == nil)
+		return ERR_NO_PATH;
 
 	if (out != ERR_OK_WRITE)
 	{
@@ -573,7 +637,10 @@ static NSString *stringFromPointer(const void *ptr)
 		return ERR_OK;
 	}
 
-	NSString *to = [[NSURL URLWithString:stringFromPointer(request + sizeof(request)/2) relativeToURL:URL] path];
+	NSString *to = resolvePath(URL.path, stringFromPointer(request + sizeof(request)/2));
+
+	if (to == nil)
+		return ERR_NO_PATH;
 
 	if ([[NSFileManager defaultManager] fileExistsAtPath:to])
 		return ERR_FILE_EXISTS;
