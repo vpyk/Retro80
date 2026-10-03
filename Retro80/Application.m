@@ -8,7 +8,21 @@
 #import "Application.h"
 #import "WindowController.h"
 
+#ifdef GNUSTEP
+#import "GNUstep-Menu.h"
+#endif
+
 @implementation Application
+
+#ifdef GNUSTEP
+
+- (void)finishLaunching
+{
+	[super finishLaunching];
+	[MenuHider installInMenu:self.mainMenu];
+}
+
+#endif
 
 - (void)sendEvent:(NSEvent *)theEvent
 {

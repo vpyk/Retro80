@@ -129,6 +129,8 @@ else()
 	set(RETRO80_BASE_SOURCES
 			${RETRO80_BASE_SOURCES}
 			Retro80/GNUstep-Sound.m
+			Retro80/GNUstep-Menu.h
+			Retro80/GNUstep-Menu.m
 			Retro80/GNUstep-Stub.m)
 endif()
 
