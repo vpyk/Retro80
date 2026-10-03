@@ -571,6 +571,14 @@ static void dataCallback(ma_device *pDevice, void *pOutput, const void *pInput, 
 	}
 }
 
+- (void)awakeFromNib
+{
+	// В Document.xib ширину счётчика задаёт автораскладка macOS, GNUstep её не применяет
+	textField.translatesAutoresizingMaskIntoConstraints = YES;
+	textField.autoresizingMask = NSViewMaxXMargin | NSViewMaxYMargin;
+	textField.frame = NSMakeRect(5, 0, 120, 22);
+}
+
 - (void)dealloc
 {
 #ifdef DEBUG
