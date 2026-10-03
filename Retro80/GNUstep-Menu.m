@@ -76,11 +76,13 @@ static NSMutableArray<MenuHider *> *hiders;
 	{
 		hiders = [NSMutableArray array];
 
-		// Состав меню, а с ним и сочетания клавиш, должен следовать за текущей машиной,
-		// даже если меню не открывали
-		NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
-		[center addObserver:self selector:@selector(windowDidChange:) name:NSWindowDidBecomeKeyNotification object:nil];
-		[center addObserver:self selector:@selector(windowDidChange:) name:NSWindowDidBecomeMainNotification object:nil];
+		// Состав меню, а с ним и сочетания клавиш, должен следовать за машиной в главном окне,
+		// даже если меню не открывали. Только главное окно: диалоги (сохранение и т.п.) им не
+		// становятся, а перестройка меню при их открытии ломала обновление «Открыть недавние».
+		[NSNotificationCenter.defaultCenter addObserver:self
+											   selector:@selector(windowDidChange:)
+												   name:NSWindowDidBecomeMainNotification
+												 object:nil];
 	}
 
 	[hiders addObject:hider];
@@ -210,11 +212,16 @@ static BOOL isVisible(NSMenu *menu)
 	// Уведомления об изменении меню — одним разом после перестройки, как в -[NSMenu update]
 	[managedMenu setMenuChangedMessagesEnabled:NO];
 
-	while (managedMenu.numberOfItems)
-		[managedMenu removeItemAtIndex:managedMenu.numberOfItems - 1];
+	// Меняются только пункты, которые скрываются или появляются: пункт, удалённый и снова
+	// добавленный в меню, в GNUstep перестаёт показывать изменения своего подменю
+	// («Открыть недавние»). Порядок пунктов в меню и в visible одинаковый, как в items.
+	for (NSInteger index = managedMenu.numberOfItems - 1; index >= 0; index--)
+		if (![visible containsObject:[managedMenu itemAtIndex:index]])
+			[managedMenu removeItemAtIndex:index];
 
-	for (NSMenuItem *item in visible)
-		[managedMenu addItem:item];
+	for (NSInteger index = 0; index < (NSInteger) visible.count; index++)
+		if (index >= managedMenu.numberOfItems || [managedMenu itemAtIndex:index] != visible[index])
+			[managedMenu insertItem:visible[index] atIndex:index];
 
 	[managedMenu setMenuChangedMessagesEnabled:YES];
 }
