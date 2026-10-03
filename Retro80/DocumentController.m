@@ -77,4 +77,14 @@
 	}
 }
 
+#ifdef GNUSTEP
+
+// GNUstep ищет тип документа по расширению с учётом регистра, а файлы часто называются .RK, .RKA и т.п.
+- (NSString *)typeFromFileExtension:(NSString *)fileExtension
+{
+	return [super typeFromFileExtension:fileExtension] ?: [super typeFromFileExtension:fileExtension.lowercaseString];
+}
+
+#endif
+
 @end
