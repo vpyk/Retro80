@@ -6,12 +6,22 @@ if(NOT CMAKE_HOST_APPLE AND NOT CMAKE_OBJC_COMPILER AND NOT DEFINED ENV{OBJC})
 	set(CMAKE_OBJC_COMPILER clang)
 endif()
 
+if(NOT CMAKE_HOST_APPLE AND NOT CMAKE_C_COMPILER AND NOT DEFINED ENV{CC})
+	set(CMAKE_C_COMPILER clang)
+endif()
+
 project(Retro80 VERSION 0.92 LANGUAGES OBJC)
 
 set(CMAKE_OBJC_STANDARD 99)
-add_compile_options(-Werror -fobjc-arc -fmodules)
+
+if(APPLE)
+	add_compile_options(-Werror -fobjc-arc -fmodules)
+endif()
 
 if(NOT APPLE)
+
+	# Под GNUstep есть код на C (miniaudio), флаги Objective-C ему не подходят
+	enable_language(C)
 
 	find_program(GNUSTEP_CONFIG gnustep-config
 			HINTS ENV GNUSTEP_SYSTEM_TOOLS
@@ -51,7 +61,7 @@ if(NOT APPLE)
 
 	message(STATUS "GNUstep: ${GNUSTEP_CONFIG}, runtime ${GNUSTEP_RUNTIME_ABI}")
 
-	add_compile_options(-fobjc-runtime=${GNUSTEP_RUNTIME_ABI} -fblocks)
+	add_compile_options("$<$<COMPILE_LANGUAGE:OBJC>:-Werror;-fobjc-arc;-fmodules;-fobjc-runtime=${GNUSTEP_RUNTIME_ABI};-fblocks>")
 	add_compile_definitions(GNUSTEP)
 
 	# Новый ABI libobjc2 надёжнее всего линкуется lld
@@ -62,6 +72,24 @@ if(NOT APPLE)
 	endif()
 
 	find_program(PLMERGE plmerge HINTS ${GNUSTEP_SYSTEM_TOOLS} REQUIRED)
+
+	# Звук и WAV: miniaudio (https://miniaud.io), библиотека на C из одного файла.
+	# Берутся только исходники: SOURCE_SUBDIR без CMakeLists.txt не подключается к сборке.
+	include(FetchContent)
+
+	FetchContent_Declare(miniaudio
+			GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+			GIT_TAG 0.11.25
+			GIT_SHALLOW TRUE
+			SOURCE_SUBDIR none)
+
+	FetchContent_MakeAvailable(miniaudio)
+
+	add_library(miniaudio STATIC ${miniaudio_SOURCE_DIR}/miniaudio.c)
+	target_include_directories(miniaudio PUBLIC ${miniaudio_SOURCE_DIR})
+	target_compile_definitions(miniaudio PUBLIC
+			MA_NO_ENGINE MA_NO_NODE_GRAPH MA_NO_RESOURCE_MANAGER MA_NO_GENERATION MA_NO_MP3 MA_NO_FLAC)
+	target_link_libraries(miniaudio PUBLIC dl pthread m)
 
 endif()
 
@@ -210,6 +238,14 @@ set(RETRO80_SOURCES
 		${RETRO80_ORION_SOURCES}
         Retro80/main.m)
 
+if(NOT APPLE)
+	# Расширение .m числится и за языком C, а под GNUstep C тоже включён (miniaudio):
+	# без явного указания CMake компилирует файлы .m как C, без флагов Objective-C
+	set(RETRO80_OBJC_SOURCES ${RETRO80_SOURCES})
+	list(FILTER RETRO80_OBJC_SOURCES INCLUDE REGEX "\\.m$")
+	set_source_files_properties(${RETRO80_OBJC_SOURCES} PROPERTIES LANGUAGE OBJC)
+endif()
+
 file(GLOB RETRO80_ROM_RESOURCES CONFIGURE_DEPENDS Retro80/ROM/*)
 
 set(RETRO80_GLOBAL_RESOURCES
@@ -248,8 +284,11 @@ if(APPLE)
 
 else()
 
-	target_precompile_headers(Retro80 PRIVATE Retro80/GNUstep-Prefix.pch)
-	target_link_libraries(Retro80 objc dispatch gnustep-base gnustep-gui GL GLU m)
+	# Не target_precompile_headers: при включённом языке C CMake собирает заголовок для OBJC
+	# поверх заголовка для C, а тот у цели без файлов на C не собирается
+	target_compile_options(Retro80 PRIVATE
+			"$<$<COMPILE_LANGUAGE:OBJC>:-include;${CMAKE_CURRENT_SOURCE_DIR}/Retro80/GNUstep-Prefix.pch>")
+	target_link_libraries(Retro80 objc dispatch gnustep-base gnustep-gui GL GLU m miniaudio)
 
 	# Бандл приложения GNUstep: Retro80.app/Retro80 + Retro80.app/Resources
 	set(RETRO80_APP_DIR ${CMAKE_CURRENT_BINARY_DIR}/Retro80.app)

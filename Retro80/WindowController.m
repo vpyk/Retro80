@@ -340,11 +340,6 @@
     }
 }
 
-- (void)awakeFromNib
-{
-    self.sound = nil;
-}
-
 #endif
 
 #ifdef DEBUG
