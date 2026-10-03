@@ -507,12 +507,25 @@ static void dataCallback(ma_device *pDevice, void *pOutput, const void *pInput, 
 	{
 		if (isInput)
 		{
-			if (frames < 0)
-				inAudioFilePos = inAudioFilePos >= (ma_uint64) -frames ? inAudioFilePos + frames : 0;
-			else if (inAudioFilePos + frames < inAudioFileLength)
-				inAudioFilePos += frames;
+			ma_uint64 pos = inAudioFilePos;
 
-			ma_decoder_seek_to_pcm_frame(&inAudioFile, inAudioFilePos);
+			if (frames < 0)
+				pos = pos >= (ma_uint64) -frames ? pos - (ma_uint64) -frames : 0;
+			else if (pos + (ma_uint64) frames < inAudioFileLength)
+				pos += (ma_uint64) frames;
+
+			ma_result result = ma_decoder_seek_to_pcm_frame(&inAudioFile, pos);
+
+#ifdef DEBUG
+			NSLog(@"seek %llu -> %llu: %s", (unsigned long long) inAudioFilePos, (unsigned long long) pos,
+				ma_result_description(result));
+#endif
+
+			if (result == MA_SUCCESS)
+				inAudioFilePos = pos;
+			else
+				NSLog(@"ma_decoder_seek_to_pcm_frame error: %s", ma_result_description(result));
+
 			textField.stringValue = self.inputTimeString;
 		}
 	}
