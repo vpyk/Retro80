@@ -78,8 +78,10 @@
 **1. Проверить, нет ли пакетов GNUstep из репозиториев.** Они собраны gcc со старым рантаймом, без ARC и блоков, и конфликтуют со своей сборкой. Если найдутся, удалить:
 
 ```sh
-pacman -Qs gnustep; pacman -Qs libobjc
+pacman -Qs gnustep
 ```
+
+Пакет `libobjc` (рантайм Objective-C из gcc) удалять не нужно, да и нельзя: это зависимость `gcc-libs`. Он не мешает: его soname `libobjc.so.4`, а у libobjc2 — `libobjc.so.4.6`, и библиотеки GNUstep линкуются с libobjc2 из `/usr/GNUstep/System/Library/Libraries`. В конце сборки скрипт проверяет это через `ldd`.
 
 **2. Зависимости:**
 

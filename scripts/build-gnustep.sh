@@ -128,18 +128,35 @@ install_deps()
 	esac
 }
 
-# Пакеты GNUstep из репозиториев собраны gcc со старым рантаймом и конфликтуют с этой сборкой
+# Пакеты GNUstep из репозиториев собраны gcc со старым рантаймом и конфликтуют с этой сборкой.
+# Рантайм gcc (libobjc) не мешает: это зависимость gcc, а его soname libobjc.so.4 отличается
+# от libobjc.so.4.6 у libobjc2. Какой из них подхватился, проверяет check_runtime.
 check_conflicts()
 {
 	local found=""
 
 	case "$(distro)" in
-		arch)   found=$(pacman -Qq 2>/dev/null | grep -E '^(gnustep|libobjc)' || true) ;;
+		arch)   found=$(pacman -Qq 2>/dev/null | grep -E '^gnustep' || true) ;;
 		debian) found=$(dpkg-query -W -f '${db:Status-Abbrev} ${Package}\n' 2>/dev/null \
-					| awk '$1 == "ii" && $2 ~ /^(gnustep|libgnustep|libobjc)/ {print $2}' || true) ;;
+					| awk '$1 == "ii" && $2 ~ /^(gnustep|libgnustep)/ {print $2}' || true) ;;
 	esac
 
 	[ -z "$found" ] || die "Удалите пакеты GNUstep из репозиториев дистрибутива:"$'\n'"$found"
+}
+
+# libgnustep-base должен быть слинкован с libobjc2, а не с рантаймом gcc
+check_runtime()
+{
+	local base="$LIBRARIES/libgnustep-base.so" objc
+
+	[ -e "$base" ] || return 0
+
+	objc=$(ldd "$base" | awk '$1 ~ /^libobjc\.so/ {print $1, $3}')
+
+	case "$objc" in
+		"libobjc.so.4.6 $LIBRARIES/"*) echo "Рантайм: $objc" ;;
+		*) die "libgnustep-base слинкован не с libobjc2: ${objc:-libobjc не найден}" ;;
+	esac
 }
 
 check_tools()
@@ -307,6 +324,8 @@ for component in libdispatch libobjc2 make base gui back; do
 			;;
 	esac
 done
+
+check_runtime
 
 step "Готово"
 echo "GNUstep установлен в $PREFIX."
