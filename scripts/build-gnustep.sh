@@ -173,14 +173,15 @@ fetch()
 {
 	local dir="$SRC/$1" url=$2 ref=$3
 
-	if [ -d "$dir/.git" ]; then
-		git -C "$dir" fetch --quiet --depth 1 origin "$ref"
-		git -C "$dir" checkout --quiet --force --detach FETCH_HEAD
-		git -C "$dir" clean --quiet -fdx
-	else
-		git clone --quiet --depth 1 --branch "$ref" "$url" "$dir"
+	# Не git clone --branch: на аннотированных тегах он пишет «is not a commit!»
+	if [ ! -d "$dir/.git" ]; then
+		git init --quiet "$dir"
+		git -C "$dir" remote add origin "$url"
 	fi
 
+	git -C "$dir" fetch --quiet --depth 1 origin "$ref"
+	git -C "$dir" -c advice.detachedHead=false checkout --quiet --force --detach FETCH_HEAD
+	git -C "$dir" clean --quiet -fdx
 	git -C "$dir" submodule update --quiet --init --recursive --depth 1
 }
 
