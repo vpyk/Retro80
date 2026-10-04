@@ -55,3 +55,23 @@ Visual Studio, NASM и прочее для tools-windows-msvc на этом пу
 | 4 | Распространение, README, позже CI | 1–2 дня |
 
 Главные риски: зрелость GUI и OpenGL в сервере win32 GNUstep (выяснится на шаге 1–2) и поведение Caps Lock.
+
+## Состояние
+
+Сборка и запуск (из оболочки MSYS2 CLANG64):
+
+```sh
+cmake -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-win
+./build-win/Retro80.app/Retro80.exe
+```
+
+Без оболочки MSYS2 — `scripts\run-windows.cmd` (добавляет `<MSYS2>\clang64\bin` в `PATH`; каталог MSYS2 — `MSYS2_ROOT`, иначе `C:\msys64` или `D:\msys64`).
+
+- **Сделано и проверено:** пп. 1–3 (главная очередь, OpenGL, CMake). Окна, экран, шейдеры, звук (WASAPI), магнитофон, перехват ленты, «Файл → Открыть» и открытие из командной строки, сохранение, меню и «Открыть недавние» работают. Сочетания клавиш — с левым Ctrl.
+- **Найдено по ходу:**
+  - GNUstep в MSYS2 собран с `-DSTRICT_APPLE_COMPATIBILITY=1` (`BOOL` — `signed char`); libobjc2 ищет методы по имени и типам, поэтому определения берутся из `gnustep-config --objc-flags`, иначе GNUstep не видит переопределённых методов с `BOOL` (`readFromData:ofType:error:` и др.);
+  - `gnustep-config` — shell-скрипт: CMake запускает его через `sh`, пути переводит `cygpath -m`; для флагов ему нужен `make` (пакет `make`);
+  - `fileSystemRepresentation` под Windows — UTF-16, для miniaudio — функции `*_w`;
+  - в MinGW нет `random()`, `long` 32-битный (форматы `%lu` для `NSUInteger`).
+- **Дальше:** п. 4 (клавиатура: таблица кодов VK) и п. 5 (модификаторы, Caps Lock), п. 8 (распространение).
