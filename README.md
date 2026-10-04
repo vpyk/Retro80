@@ -126,4 +126,4 @@ cmake --build build-win
 
 Вне оболочки MSYS2 сборку запускает `scripts\run-windows.cmd` (добавляет DLL из MSYS2 в `PATH`).
 
-Переносимый ZIP-архив, который работает без MSYS2 (эмулятор, нужные DLL, служебные программы и ресурсы GNUstep): `scripts/package-windows.sh`, результат — в `build-win-release/dist`.
+Переносимый ZIP-архив, который работает без MSYS2 (эмулятор, нужные DLL, служебные программы и ресурсы GNUstep): `scripts/package-windows.sh` (вне оболочки MSYS2 — `scripts\package-windows.cmd`), результат — в `build-win-release/dist`.
