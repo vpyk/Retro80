@@ -101,3 +101,28 @@ cmake --build build
 
 При первой конфигурации CMake скачивает [miniaudio](https://miniaud.io) для звука. Установка в `/usr/GNUstep/Local/Applications`: `sudo cmake --install build`.
 После обновления системных библиотек (например, ICU) может понадобиться пересобрать часть GNUstep: `scripts/build-gnustep.sh base gui back`.
+
+## Сборка под Windows
+Используются пакеты GNUstep из [MSYS2](https://www.msys2.org) (окружение CLANG64): возможности те же, что под Linux.
+* ⌘ — **[Alt]**: отладчик — Alt+D, Reset — Alt+R; ⌥ — правый **[Ctrl]**: запись на магнитофон — RCtrl+Alt+R.
+* [УС] — левый **[Ctrl]**, [РУС/ЛАТ] — правый **[Ctrl]** или **[Capslock]** для Микро-80/ЮТ-88, [ПС] — **[Insert]** (Enter на цифровой клавиатуре в Windows неотличим от обычного).
+* Меню внутри окна эмулятора: `-NSMenuInterfaceStyle NSWindows95InterfaceStyle` в командной строке (так запускает `scripts\run-windows.cmd`).
+
+Пакеты (в оболочке MSYS2 CLANG64; libdispatch не нужен, его рантайм блоков конфликтует с libobjc2):
+
+```sh
+pacman -S --needed git make mingw-w64-clang-x86_64-{clang,lld,cmake,ninja} \
+  mingw-w64-clang-x86_64-{gnustep-make,gnustep-base,gnustep-gui,gnustep-back,libobjc2}
+```
+
+Сборка и запуск:
+
+```sh
+cmake -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-win
+./build-win/Retro80.app/Retro80.exe
+```
+
+Вне оболочки MSYS2 сборку запускает `scripts\run-windows.cmd` (добавляет DLL из MSYS2 в `PATH`).
+
+Переносимый ZIP-архив, который работает без MSYS2 (эмулятор, нужные DLL, служебные программы и ресурсы GNUstep): `scripts/package-windows.sh`, результат — в `build-win-release/dist`.
