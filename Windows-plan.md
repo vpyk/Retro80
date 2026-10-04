@@ -15,14 +15,16 @@ OpenGL в сервере win32 есть (`libs-back/Source/win32/w32_GLcontext.m
 
 ### Установка
 
-1. MSYS2 (`winget install MSYS2.MSYS2` или установщик с msys2.org). Место: 3–5 ГБ.
+1. MSYS2 (`winget install MSYS2.MSYS2` или установщик с msys2.org). Место: 3–5 ГБ. Установлен в `D:\msys64`.
 2. В оболочке **MSYS2 CLANG64**:
 
 ```sh
 pacman -S --needed git \
   mingw-w64-clang-x86_64-{clang,lld,cmake,ninja} \
-  mingw-w64-clang-x86_64-{gnustep-make,gnustep-base,gnustep-gui,gnustep-back,libobjc2,libdispatch}
+  mingw-w64-clang-x86_64-{gnustep-make,gnustep-base,gnustep-gui,gnustep-back,libobjc2}
 ```
+
+**Без `libdispatch`:** пакет тянет `libblocksruntime-swift`, чей `Block.h` конфликтует с `libobjc2` (в libobjc2 свой рантайм блоков). Ставить с `--overwrite` не стоит — в программе оказались бы две реализации `_Block_copy` и др. libdispatch на Windows и не нужен: gnustep-base в MSYS2 собран без него, `dispatch_async` на главную очередь заменяется (п. 1), а `dispatch_once` в `ComputerFactory.m` — обычной инициализацией.
 
 Возможно, понадобится `mingw-w64-clang-x86_64-libepoxy` (см. п. 2 ниже).
 
@@ -30,7 +32,7 @@ Visual Studio, NASM и прочее для tools-windows-msvc на этом пу
 
 ## Изменения в коде
 
-1. **`dispatch_async(dispatch_get_main_queue(), …)`** — `Display.m`, `Micro80Screen.m`, `Orion128Screen.m`, `SpecialistScreen.m`, `GNUstep-Sound.m` (и `Sound.m` на macOS). Блоки главной очереди libdispatch выполняются, только если libs-base собран с libdispatch; в MSYS2 это не так, и экран, вероятно, не будет обновляться. **Решение:** заменить на главную очередь Foundation (`NSOperationQueue.mainQueue` / `performSelectorOnMainThread`). Это общий с macOS код — проверить на macOS до слияния в основную ветку. `dispatch_once` (`ComputerFactory.m`) от главной очереди не зависит.
+1. **`dispatch_async(dispatch_get_main_queue(), …)`** — `Display.m`, `Micro80Screen.m`, `Orion128Screen.m`, `SpecialistScreen.m`, `GNUstep-Sound.m` (и `Sound.m` на macOS). Блоки главной очереди libdispatch выполняются, только если libs-base собран с libdispatch; в MSYS2 это не так, и экран, вероятно, не будет обновляться. **Решение:** заменить на главную очередь Foundation (`NSOperationQueue.mainQueue` / `performSelectorOnMainThread`). Это общий с macOS код — проверить на macOS до слияния в основную ветку. `dispatch_once` (`ComputerFactory.m`) заменить обычной инициализацией (например, в `+initialize`), чтобы под Windows не нужен был libdispatch; в CMake не линковать `dispatch` на Windows.
 2. **OpenGL.** В Windows `GL/gl.h` описывает только OpenGL 1.1, а `Display.m` использует ~20 функций новее (`glCreateShader`, `glShaderSource`, `glCompileShader`, `glGetShaderiv`, `glGetShaderInfoLog`, `glCreateProgram`, `glAttachShader`, `glLinkProgram`, `glGetProgramiv`, `glGetProgramInfoLog`, `glUseProgram`, `glDeleteShader`, `glDeleteProgram`, `glGetUniformLocation`, `glUniform1i/1f/2f`, `glActiveTexture`). Загрузка через `wglGetProcAddress` небольшим кодом в `Display.m` или через libepoxy. Риск: чёрно-белый режим без шейдера использует `glMatrixMode(GL_COLOR)` (ARB_imaging), драйверы Windows могут его не поддерживать.
 3. **`CMakeLists.txt`:** `opengl32` вместо `GL GLU` (GLU код не использует); для miniaudio без `dl pthread m`; копирование нужных DLL к `Retro80.exe` для запуска вне оболочки MSYS2.
 4. **Клавиатура:** сервер win32 отдаёт в `keyCode` коды виртуальных клавиш (VK, `wParam`) — вторая таблица в `macKeyCode()` (`RKKeyboard.m`). VK букв от раскладки не зависят, VK знаков препинания могут зависеть — проверить на русской раскладке.
