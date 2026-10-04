@@ -106,7 +106,7 @@ cmake --build build
 Используются пакеты GNUstep из [MSYS2](https://www.msys2.org) (окружение CLANG64): возможности те же, что под Linux.
 * ⌘ — **[Alt]**: отладчик — Alt+D, Reset — Alt+R; ⌥ — правый **[Ctrl]**: запись на магнитофон — RCtrl+Alt+R.
 * [УС] — левый **[Ctrl]**, [РУС/ЛАТ] — правый **[Ctrl]** или **[Capslock]** для Микро-80/ЮТ-88, [ПС] — **[Insert]** (Enter на цифровой клавиатуре в Windows неотличим от обычного).
-* Меню внутри окна эмулятора: `-NSMenuInterfaceStyle NSWindows95InterfaceStyle` в командной строке (так запускает `scripts\run-windows.cmd`).
+* Меню по умолчанию — внутри окна эмулятора; отдельным окном в стиле NeXTSTEP: `-NSMenuInterfaceStyle NSNextStepInterfaceStyle` в командной строке.
 
 Пакеты (в оболочке MSYS2 CLANG64; libdispatch не нужен, его рантайм блоков конфликтует с libobjc2):
 

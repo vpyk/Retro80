@@ -12,11 +12,13 @@ int main(int argc, const char * argv[])
 	// Под X11 ⌘ — левый Alt, ⌥ — правый Alt (РУС/ЛАТ), Control — Ctrl.
 	// Под Windows сервер GNUstep не различает левый и правый Alt, поэтому как в X11 по возможности:
 	// ⌘ — Alt, Control — левый Ctrl ([УС]), ⌥ — правый Ctrl (РУС/ЛАТ); по умолчанию было бы
-	// ⌘ — левый Ctrl, ⌥ — Alt. Всё переопределяется через defaults write.
+	// ⌘ — левый Ctrl, ⌥ — Alt. Под Windows меню по умолчанию внутри окна, как принято в Windows.
+	// Всё переопределяется через defaults write или аргументы командной строки.
 	@autoreleasepool
 	{
 		[NSUserDefaults.standardUserDefaults registerDefaults:@{
 #ifdef _WIN32
+			@"NSMenuInterfaceStyle": @"NSWindows95InterfaceStyle",
 			@"GSFirstCommandKey": @"Alt_R",
 			@"GSFirstControlKey": @"Control_L",
 			@"GSFirstAlternateKey": @"Control_R",
