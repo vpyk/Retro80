@@ -29,7 +29,7 @@
 
 #ifdef _WIN32
 
-// Enter на цифровой клавиатуре в Windows имеет тот же код VK, что и Return, поэтому [ПС] недоступна
+// Enter на цифровой клавиатуре в Windows имеет тот же код VK, что и Return, поэтому [ПС] — на Insert
 static const unsigned short platformKeyCodes[][2] = {
 	{0x1B, 53},																	// Esc
 	{0x70, 122}, {0x71, 120}, {0x72, 99}, {0x73, 118}, {0x74, 96}, {0x75, 97},	// F1-F6
@@ -44,7 +44,7 @@ static const unsigned short platformKeyCodes[][2] = {
 	{0x4A, 38}, {0x4B, 40}, {0x4C, 37}, {0xBA, 41}, {0xDE, 39}, {0x0D, 36},		// J K L ; ' Return
 	{0xE2, 10}, {0x5A, 6}, {0x58, 7}, {0x43, 8}, {0x56, 9}, {0x42, 11},			// <> Z X C V B
 	{0x4E, 45}, {0x4D, 46}, {0xBC, 43}, {0xBE, 47}, {0xBF, 44}, {0x20, 49},		// N M , . / Space
-	{0x24, 115}, {0x2E, 117},													// Home Delete
+	{0x24, 115}, {0x2E, 117}, {0x2D, 76},										// Home Delete Insert (как KP_Enter)
 	{0x25, 123}, {0x27, 124}, {0x28, 125}, {0x26, 126},							// ← → ↓ ↑
 };
 
