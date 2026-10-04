@@ -10,10 +10,10 @@ if not defined MSYS2_ROOT if exist "C:\msys64\clang64\bin" set "MSYS2_ROOT=C:\ms
 if not defined MSYS2_ROOT if exist "D:\msys64\clang64\bin" set "MSYS2_ROOT=D:\msys64"
 
 if not defined MSYS2_ROOT (
-	echo MSYS2 not found, set MSYS2_ROOT
-	pause
-	exit /b 1
+    echo MSYS2 not found, set MSYS2_ROOT
+    pause
+    exit /b 1
 )
 
 set "PATH=%MSYS2_ROOT%\clang64\bin;%PATH%"
-start "" "%~dp0..\build-win\Retro80.app\Retro80.exe" %*
+start "" "%~dp0..\build-win\Retro80.app\Retro80.exe"  -NSMenuInterfaceStyle NSWindows95InterfaceStyle %*
