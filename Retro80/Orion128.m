@@ -166,7 +166,7 @@
 			case 1:
 			{
 				menuItem.title = [menuItem.title componentsSeparatedByString:@":"].firstObject;
-				menuItem.title = [menuItem.title stringByAppendingFormat:@": %luK", self.ram.length >> 10];
+				menuItem.title = [menuItem.title stringByAppendingFormat:@": %luK", (unsigned long) (self.ram.length >> 10)];
 
 				menuItem.state = NO;
 				break;

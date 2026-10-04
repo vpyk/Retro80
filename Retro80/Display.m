@@ -9,10 +9,81 @@
 
 #ifndef GNUSTEP
 #import <OpenGL/gl.h>
+#elif defined(_WIN32)
+#import <GL/gl.h>
+#import <GL/glext.h>
 #else
 #define GL_GLEXT_PROTOTYPES
 #import <GL/gl.h>
 #import <GL/glext.h>
+#endif
+
+#ifdef _WIN32
+
+// opengl32 в Windows экспортирует только OpenGL 1.1, остальные функции берутся через
+// wglGetProcAddress — и только при активном контексте, поэтому загружаются при первой отрисовке
+
+#define RETRO80_GL_FUNCTIONS(F) \
+	F(PFNGLACTIVETEXTUREPROC, glActiveTexture) \
+	F(PFNGLATTACHSHADERPROC, glAttachShader) \
+	F(PFNGLCOMPILESHADERPROC, glCompileShader) \
+	F(PFNGLCREATEPROGRAMPROC, glCreateProgram) \
+	F(PFNGLCREATESHADERPROC, glCreateShader) \
+	F(PFNGLDELETEPROGRAMPROC, glDeleteProgram) \
+	F(PFNGLDELETESHADERPROC, glDeleteShader) \
+	F(PFNGLGETPROGRAMINFOLOGPROC, glGetProgramInfoLog) \
+	F(PFNGLGETPROGRAMIVPROC, glGetProgramiv) \
+	F(PFNGLGETSHADERINFOLOGPROC, glGetShaderInfoLog) \
+	F(PFNGLGETSHADERIVPROC, glGetShaderiv) \
+	F(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation) \
+	F(PFNGLLINKPROGRAMPROC, glLinkProgram) \
+	F(PFNGLSHADERSOURCEPROC, glShaderSource) \
+	F(PFNGLUNIFORM1FPROC, glUniform1f) \
+	F(PFNGLUNIFORM1IPROC, glUniform1i) \
+	F(PFNGLUNIFORM2FPROC, glUniform2f) \
+	F(PFNGLUSEPROGRAMPROC, glUseProgram)
+
+#define RETRO80_GL_DECLARE(type, name) static type retro80_##name;
+RETRO80_GL_FUNCTIONS(RETRO80_GL_DECLARE)
+
+#define glActiveTexture retro80_glActiveTexture
+#define glAttachShader retro80_glAttachShader
+#define glCompileShader retro80_glCompileShader
+#define glCreateProgram retro80_glCreateProgram
+#define glCreateShader retro80_glCreateShader
+#define glDeleteProgram retro80_glDeleteProgram
+#define glDeleteShader retro80_glDeleteShader
+#define glGetProgramInfoLog retro80_glGetProgramInfoLog
+#define glGetProgramiv retro80_glGetProgramiv
+#define glGetShaderInfoLog retro80_glGetShaderInfoLog
+#define glGetShaderiv retro80_glGetShaderiv
+#define glGetUniformLocation retro80_glGetUniformLocation
+#define glLinkProgram retro80_glLinkProgram
+#define glShaderSource retro80_glShaderSource
+#define glUniform1f retro80_glUniform1f
+#define glUniform1i retro80_glUniform1i
+#define glUniform2f retro80_glUniform2f
+#define glUseProgram retro80_glUseProgram
+
+static BOOL loadGLFunctions(void)
+{
+	static BOOL loaded = NO;
+
+	if (loaded)
+		return YES;
+
+#define RETRO80_GL_LOAD(type, name) \
+	if ((retro80_##name = (type) wglGetProcAddress(#name)) == NULL) \
+	{ \
+		NSLog(@"OpenGL: нет функции %s", #name); \
+		return NO; \
+	}
+
+	RETRO80_GL_FUNCTIONS(RETRO80_GL_LOAD)
+
+	return loaded = YES;
+}
+
 #endif
 
 #import "Display.h"
@@ -43,6 +114,12 @@
 	BOOL tvnoise;
 
 	GLuint shaderProgram;
+
+	BOOL redisplayPending;
+
+#ifdef _WIN32
+	BOOL glReady;
+#endif
 }
 
 - (uint32_t *)setupGraphicsWidth:(NSUInteger)width height:(NSUInteger)height
@@ -57,9 +134,7 @@
 		data2 = nil;
 		overlay = NSZeroSize;
 
-		dispatch_async(dispatch_get_main_queue(), ^{
-			[(WindowController *) self.window.windowController resize];
-		});
+		[self resizeWindowOnMainThread];
 
 		isSelected = NO;
 		selected = NSZeroRect;
@@ -106,27 +181,64 @@
 		{
 			mode = 3;
 
-			dispatch_async(dispatch_get_main_queue(), ^{
-				[self setNeedsDisplay:YES];
-			});
+			[self setNeedsDisplayOnMainThread];
 		}
 		else
 		{
 			mode = 1;
 
-			dispatch_async(dispatch_get_main_queue(), ^{
-				[self setNeedsDisplay:YES];
-			});
+			[self setNeedsDisplayOnMainThread];
 		}
 	}
 	else if (!gigaScreen)
 	{
 		mode = 2;
 
-		dispatch_async(dispatch_get_main_queue(), ^{
-			[self setNeedsDisplay:YES];
-		});
+		[self setNeedsDisplayOnMainThread];
 	}
+}
+
+// Через performSelectorOnMainThread, а не dispatch_async(dispatch_get_main_queue()):
+// под Windows (MSYS2) GNUstep собран без libdispatch, и главная очередь там не обслуживается
+
+// Как и главная очередь, выполняется и пока открыто меню или модальный диалог
+static NSArray<NSString *> *mainThreadModes(void)
+{
+	return @[NSDefaultRunLoopMode, NSModalPanelRunLoopMode, NSEventTrackingRunLoopMode];
+}
+
+- (void)redisplay
+{
+	@synchronized(self)
+	{
+		redisplayPending = NO;
+	}
+
+	[self setNeedsDisplay:YES];
+}
+
+- (void)setNeedsDisplayOnMainThread
+{
+	@synchronized(self)
+	{
+		// Пока прошлый запрос не выполнен, новые не нужны и не должны копиться
+		if (redisplayPending)
+			return;
+
+		redisplayPending = YES;
+	}
+
+	[self performSelectorOnMainThread:@selector(redisplay) withObject:nil waitUntilDone:NO modes:mainThreadModes()];
+}
+
+- (void)resizeWindow
+{
+	[(WindowController *) self.window.windowController resize];
+}
+
+- (void)resizeWindowOnMainThread
+{
+	[self performSelectorOnMainThread:@selector(resizeWindow) withObject:nil waitUntilDone:NO modes:mainThreadModes()];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -135,6 +247,17 @@
 {
 	@synchronized(self)
 	{
+#ifdef _WIN32
+		if (!glReady)
+		{
+			if (!loadGLFunctions())
+				return;
+
+			[self createShaderProgram];
+			glReady = YES;
+		}
+#endif
+
 #ifndef GNUSTEP
 		NSRect backingBounds = [self convertRectToBacking:[self bounds]];
 #else
@@ -743,19 +866,8 @@ static GLuint createShader(GLenum shaderType)
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-- (void)awakeFromNib
+- (void)createShaderProgram
 {
-	gigaScreen = [NSUserDefaults.standardUserDefaults boolForKey:@"gigaScreen"];
-	grayscale = [NSUserDefaults.standardUserDefaults boolForKey:@"grayscale"];
-	tvnoise = [NSUserDefaults.standardUserDefaults boolForKey:@"tvnoise"];
-
-	mode = 1;
-
-#ifndef GNUSTEP
-	[self setWantsBestResolutionOpenGLSurface:YES];
-	[[self openGLContext] makeCurrentContext];
-#endif
-
 	GLuint fragmentShader = createShader(GL_FRAGMENT_SHADER);
 
 	if (fragmentShader)
@@ -794,6 +906,24 @@ static GLuint createShader(GLenum shaderType)
 
 		glDeleteShader(fragmentShader);
 	}
+}
+
+- (void)awakeFromNib
+{
+	gigaScreen = [NSUserDefaults.standardUserDefaults boolForKey:@"gigaScreen"];
+	grayscale = [NSUserDefaults.standardUserDefaults boolForKey:@"grayscale"];
+	tvnoise = [NSUserDefaults.standardUserDefaults boolForKey:@"tvnoise"];
+
+	mode = 1;
+
+#ifndef GNUSTEP
+	[self setWantsBestResolutionOpenGLSurface:YES];
+	[[self openGLContext] makeCurrentContext];
+#endif
+
+#ifndef _WIN32
+	[self createShaderProgram];
+#endif
 }
 
 - (void)dealloc

@@ -29,7 +29,7 @@
 			case 1:
 			{
 				menuItem.title = [[menuItem.title componentsSeparatedByString:@":"].firstObject
-					stringByAppendingFormat:@": 64K + %luK", (self.ram.length >> 10) - 64];
+					stringByAppendingFormat:@": 64K + %luK", (unsigned long) ((self.ram.length >> 10) - 64)];
 
 				menuItem.state = NO;
 				break;

@@ -9,14 +9,21 @@ int main(int argc, const char * argv[])
 {
 #ifdef GNUSTEP
 	// Обозначения модификаторов в меню (GNUstep по умолчанию рисует ⌘ как «#», ⌥ как «+»).
-	// Под GNUstep ⌘ — левый Alt, ⌥ — правый. Переопределяются через defaults write.
+	// Под X11 ⌘ — левый Alt, ⌥ — правый; под Windows ⌘ — левый Ctrl, ⌥ — Alt, Control — правый Ctrl.
+	// Переопределяются через defaults write.
 	@autoreleasepool
 	{
 		[NSUserDefaults.standardUserDefaults registerDefaults:@{
+#ifdef _WIN32
+			@"GSCommandKeyString": @"Ctrl+",
+			@"GSAlternateKeyString": @"Alt+",
+			@"GSControlKeyString": @"RCtrl+",
+#else
 			@"GSCommandKeyString": @"Alt+",
 			@"GSAlternateKeyString": @"RAlt+",
-			@"GSShiftKeyString": @"Shift+",
-			@"GSControlKeyString": @"Ctrl+"
+			@"GSControlKeyString": @"Ctrl+",
+#endif
+			@"GSShiftKeyString": @"Shift+"
 		}];
 	}
 #endif

@@ -16,15 +16,17 @@
 
 @implementation ComputerFactory
 
+static NSArray<Class<ComputerFactory>> *factories = nil;
+
+// Без dispatch_once: под Windows (MSYS2) libdispatch нет, а +initialize рантайм и так вызывает один раз
++ (void)initialize
+{
+	if (self == ComputerFactory.class)
+		factories = @[Radio86RKFactory.class, Micro80Factory.class, SpecialistFactory.class, Orion128Factory.class];
+}
+
 + (NSArray<Class<ComputerFactory>> *)factories
 {
-	static NSArray<Class<ComputerFactory>> *factories = nil;
-	static dispatch_once_t onceToken;
-
-	dispatch_once(&onceToken, ^{
-		factories = @[Radio86RKFactory.class, Micro80Factory.class, SpecialistFactory.class, Orion128Factory.class];
-	});
-
 	return factories;
 }
 

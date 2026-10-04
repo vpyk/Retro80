@@ -8,6 +8,10 @@
  *****/
 
 #import "x8253.h"
+
+#ifdef _WIN32
+#define random rand	// В MinGW нет random()
+#endif
 #import "Sound.h"
 
 @implementation X8253

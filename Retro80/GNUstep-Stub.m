@@ -1,5 +1,32 @@
 #import <objc/runtime.h>
 
+#if defined(DEBUG) && defined(_WIN32)
+
+// Отладка: журнал исключений Objective-C в момент возникновения. Под Windows исключение,
+// дошедшее до оконной процедуры, завершает программу без сообщения о причине.
+
+@interface NSException (Retro80Debug)
+- (void)retro80_raise;
+@end
+
+@implementation NSException (Retro80Debug)
+
++ (void)load
+{
+	method_exchangeImplementations(class_getInstanceMethod(self, @selector(raise)),
+								   class_getInstanceMethod(self, @selector(retro80_raise)));
+}
+
+- (void)retro80_raise
+{
+	NSLog(@"Исключение %@: %@\n%@", self.name, self.reason, [NSThread callStackSymbols]);
+	[self retro80_raise];
+}
+
+@end
+
+#endif
+
 @implementation NSLayoutConstraint (GNUstep)
 - (void)setConstant:(CGFloat)constant { }
 @end

@@ -78,7 +78,7 @@
 
 				if (self.ram.length > 0x10800)
 					menuItem.title = [menuItem.title stringByAppendingFormat:@": 64K + %luK",
-																			 (self.ram.length >> 10) - 66];
+																			 (unsigned long) ((self.ram.length >> 10) - 66)];
 				else if (self.ram.length == 0x10800)
 					menuItem.title = [menuItem.title stringByAppendingString:@": 64K"];
 				else if (self.ram.length == 0x1800)

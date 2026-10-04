@@ -93,6 +93,26 @@ static NSString *timeString(ma_uint64 frames)
 	[textField performSelectorOnMainThread:@selector(setStringValue:) withObject:string waitUntilDone:NO];
 }
 
+// Под Windows fileSystemRepresentation в GNUstep — строка UTF-16, для неё у miniaudio свои функции
+
+static ma_result decoderInitFile(NSString *path, const ma_decoder_config *config, ma_decoder *decoder)
+{
+#ifdef _WIN32
+	return ma_decoder_init_file_w((const wchar_t *) path.fileSystemRepresentation, config, decoder);
+#else
+	return ma_decoder_init_file(path.fileSystemRepresentation, config, decoder);
+#endif
+}
+
+static ma_result encoderInitFile(NSString *path, const ma_encoder_config *config, ma_encoder *encoder)
+{
+#ifdef _WIN32
+	return ma_encoder_init_file_w((const wchar_t *) path.fileSystemRepresentation, config, encoder);
+#else
+	return ma_encoder_init_file(path.fileSystemRepresentation, config, encoder);
+#endif
+}
+
 - (void)closeInput
 {
 	if (isInput)
@@ -330,7 +350,7 @@ static void dataCallback(ma_device *pDevice, void *pOutput, const void *pInput, 
 		ma_decoder_config config = ma_decoder_config_init(ma_format_s16, CHANNELS, SAMPLE_RATE);
 		config.encodingFormat = ma_encoding_format_wav;
 
-		ma_result result = ma_decoder_init_file(URL.path.fileSystemRepresentation, &config, &inAudioFile);
+		ma_result result = decoderInitFile(URL.path, &config, &inAudioFile);
 
 		if (result != MA_SUCCESS)
 		{
@@ -354,12 +374,15 @@ static void dataCallback(ma_device *pDevice, void *pOutput, const void *pInput, 
 {
 }
 
+- (void)resetStatus
+{
+	textField.textColor = [NSColor blackColor];
+	textField.stringValue = @"--:--";
+}
+
 - (BOOL)start
 {
-	dispatch_async(dispatch_get_main_queue(), ^{
-		self->textField.textColor = [NSColor blackColor];
-		self->textField.stringValue = @"--:--";
-	});
+	[self performSelectorOnMainThread:@selector(resetStatus) withObject:nil waitUntilDone:NO];
 
 	quartz = self.computer.quartz;
 	frame = self.computer.clock;
@@ -563,7 +586,7 @@ static void dataCallback(ma_device *pDevice, void *pOutput, const void *pInput, 
 			@synchronized(computer)
 			{
 				ma_encoder_config config = ma_encoder_config_init(ma_encoding_format_wav, ma_format_s16, CHANNELS, SAMPLE_RATE);
-				ma_result result = ma_encoder_init_file(savePanel.URL.path.fileSystemRepresentation, &config, &outAudioFile);
+				ma_result result = encoderInitFile(savePanel.URL.path, &config, &outAudioFile);
 
 				if (result != MA_SUCCESS)
 				{

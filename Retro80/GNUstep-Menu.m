@@ -65,6 +65,18 @@ static NSMutableArray<MenuHider *> *hiders;
 		if (item.action == @selector(clearRecentDocuments:))
 			return;
 
+	// Под Windows меню недавних документов в момент подключения может быть ещё не заполнено
+	NSDocumentController *documentController = NSDocumentController.sharedDocumentController;
+	SEL selector = NSSelectorFromString(@"_recentDocumentsMenu");
+
+	if ([documentController respondsToSelector:selector])
+	{
+		NSMenu *(*imp)(id, SEL) = (NSMenu *(*)(id, SEL)) [documentController methodForSelector:selector];
+
+		if (imp(documentController, selector) == menu)
+			return;
+	}
+
 	[self installInMenu:menu];
 
 	// Копия: в GNUstep itemArray — это сам изменяемый массив пунктов меню
@@ -186,8 +198,40 @@ static BOOL isVisible(NSMenu *menu)
 	updating = NO;
 }
 
+// GNUstep сам добавляет пункты в некоторые меню (например, в меню приложения) и может переносить
+// их между меню. Чужие пункты принимаются в список на их текущее место и считаются видимыми,
+// а пункты, перенесённые в другое меню, из списка убираются.
+- (void)adoptForeignItems
+{
+	NSMutableArray<NSMenuItem *> *newItems = [NSMutableArray arrayWithCapacity:items.count];
+
+	for (NSMenuItem *item in items)
+		if (item.menu == nil || item.menu == managedMenu)
+			[newItems addObject:item];
+
+	NSMenuItem *previous = nil;
+
+	for (NSMenuItem *item in [managedMenu.itemArray copy])
+	{
+		if ([newItems indexOfObjectIdenticalTo:item] == NSNotFound)
+		{
+			[newItems insertObject:item atIndex:previous ? [newItems indexOfObjectIdenticalTo:previous] + 1 : 0];
+
+#ifdef DEBUG
+			NSLog(@"MenuHider «%@»: чужой пункт «%@»", managedMenu.title, item.title);
+#endif
+		}
+
+		previous = item;
+	}
+
+	items = newItems;
+}
+
 - (void)updateMenu
 {
+	[self adoptForeignItems];
+
 	NSMutableArray<NSMenuItem *> *visible = [NSMutableArray arrayWithCapacity:items.count];
 
 	for (NSMenuItem *item in items)
@@ -212,16 +256,25 @@ static BOOL isVisible(NSMenu *menu)
 	// Уведомления об изменении меню — одним разом после перестройки, как в -[NSMenu update]
 	[managedMenu setMenuChangedMessagesEnabled:NO];
 
-	// Меняются только пункты, которые скрываются или появляются: пункт, удалённый и снова
-	// добавленный в меню, в GNUstep перестаёт показывать изменения своего подменю
-	// («Открыть недавние»). Порядок пунктов в меню и в visible одинаковый, как в items.
+	// Меняются только пункты, которые скрываются, появляются или стоят не на своём месте:
+	// пункт, удалённый и снова добавленный в меню, в GNUstep перестаёт показывать изменения
+	// своего подменю («Открыть недавние»)
 	for (NSInteger index = managedMenu.numberOfItems - 1; index >= 0; index--)
-		if (![visible containsObject:[managedMenu itemAtIndex:index]])
+		if ([visible indexOfObjectIdenticalTo:[managedMenu itemAtIndex:index]] == NSNotFound)
 			[managedMenu removeItemAtIndex:index];
 
 	for (NSInteger index = 0; index < (NSInteger) visible.count; index++)
-		if (index >= managedMenu.numberOfItems || [managedMenu itemAtIndex:index] != visible[index])
-			[managedMenu insertItem:visible[index] atIndex:index];
+	{
+		NSMenuItem *item = visible[index];
+
+		if (index < managedMenu.numberOfItems && [managedMenu itemAtIndex:index] == item)
+			continue;
+
+		if (item.menu == managedMenu)
+			[managedMenu removeItem:item];
+
+		[managedMenu insertItem:item atIndex:index];
+	}
 
 	[managedMenu setMenuChangedMessagesEnabled:YES];
 }

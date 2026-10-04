@@ -28,12 +28,30 @@ if(NOT APPLE)
 			PATHS /usr/GNUstep/System/Tools /usr/GNUstep/Local/Tools
 			REQUIRED)
 
+	# Под Windows (MSYS2) gnustep-config — shell-скрипт, а пути он отдаёт в виде MSYS2 (/clang64/...)
+	if(CMAKE_HOST_WIN32)
+		find_program(MSYS_SH sh REQUIRED)
+		find_program(CYGPATH cygpath REQUIRED)
+		set(GNUSTEP_CONFIG_COMMAND ${MSYS_SH} ${GNUSTEP_CONFIG})
+	else()
+		set(GNUSTEP_CONFIG_COMMAND ${GNUSTEP_CONFIG})
+	endif()
+
 	function(gnustep_variable name)
 		execute_process(
-				COMMAND ${GNUSTEP_CONFIG} --variable=${name}
+				COMMAND ${GNUSTEP_CONFIG_COMMAND} --variable=${name}
 				OUTPUT_VARIABLE value
 				OUTPUT_STRIP_TRAILING_WHITESPACE
 				COMMAND_ERROR_IS_FATAL ANY)
+
+		if(CMAKE_HOST_WIN32)
+			execute_process(
+					COMMAND ${CYGPATH} -m ${value}
+					OUTPUT_VARIABLE value
+					OUTPUT_STRIP_TRAILING_WHITESPACE
+					COMMAND_ERROR_IS_FATAL ANY)
+		endif()
+
 		set(${name} ${value} PARENT_SCOPE)
 	endfunction()
 
@@ -49,7 +67,7 @@ if(NOT APPLE)
 
 	# ABI рантайма берётся из настроек gnustep-make, чтобы совпадать с собранными библиотеками
 	execute_process(
-			COMMAND ${GNUSTEP_CONFIG} --objc-flags
+			COMMAND ${GNUSTEP_CONFIG_COMMAND} --objc-flags
 			OUTPUT_VARIABLE GNUSTEP_OBJC_FLAGS
 			COMMAND_ERROR_IS_FATAL ANY)
 
@@ -63,6 +81,19 @@ if(NOT APPLE)
 
 	add_compile_options("$<$<COMPILE_LANGUAGE:OBJC>:-Werror;-fobjc-arc;-fmodules;-fobjc-runtime=${GNUSTEP_RUNTIME_ABI};-fblocks>")
 	add_compile_definitions(GNUSTEP)
+
+	if(WIN32)
+		# Определения — те же, с которыми собран GNUstep в MSYS2 (GNUSTEP_WITH_DLL, _NATIVE_OBJC_EXCEPTIONS и др.).
+		# Важно STRICT_APPLE_COMPATIBILITY: от него зависит тип BOOL, а libobjc2 ищет методы по имени и типам —
+		# при другом BOOL библиотеки GNUstep не видят переопределённых методов (readFromData:ofType:error: и т.п.)
+		string(REGEX MATCHALL "(^| )-D[^ \n]+" GNUSTEP_DEFINITIONS "${GNUSTEP_OBJC_FLAGS}")
+		string(REGEX REPLACE "(^| )-D" "" GNUSTEP_DEFINITIONS "${GNUSTEP_DEFINITIONS}")
+		list(REMOVE_DUPLICATES GNUSTEP_DEFINITIONS)
+		message(STATUS "GNUstep definitions: ${GNUSTEP_DEFINITIONS}")
+
+		add_compile_definitions("$<$<COMPILE_LANGUAGE:OBJC>:${GNUSTEP_DEFINITIONS}>")
+		add_compile_options("$<$<COMPILE_LANGUAGE:OBJC>:-fexceptions;-fobjc-exceptions>")
+	endif()
 
 	# Новый ABI libobjc2 надёжнее всего линкуется lld
 	find_program(LLD_LINKER ld.lld)
@@ -89,7 +120,9 @@ if(NOT APPLE)
 	target_include_directories(miniaudio PUBLIC ${miniaudio_SOURCE_DIR})
 	target_compile_definitions(miniaudio PUBLIC
 			MA_NO_ENGINE MA_NO_NODE_GRAPH MA_NO_RESOURCE_MANAGER MA_NO_GENERATION MA_NO_MP3 MA_NO_FLAC)
-	target_link_libraries(miniaudio PUBLIC dl pthread m)
+	if(NOT WIN32)
+		target_link_libraries(miniaudio PUBLIC dl pthread m)
+	endif()
 
 endif()
 
@@ -290,7 +323,13 @@ else()
 	# поверх заголовка для C, а тот у цели без файлов на C не собирается
 	target_compile_options(Retro80 PRIVATE
 			"$<$<COMPILE_LANGUAGE:OBJC>:-include;${CMAKE_CURRENT_SOURCE_DIR}/Retro80/GNUstep-Prefix.pch>")
-	target_link_libraries(Retro80 objc dispatch gnustep-base gnustep-gui GL GLU m miniaudio)
+	if(WIN32)
+		# MSYS2: GNUstep собран без libdispatch, OpenGL — системная opengl32,
+		# c++ — для исключений Objective-C в libobjc2 (как в gnustep-config --gui-libs)
+		target_link_libraries(Retro80 objc gnustep-base gnustep-gui opengl32 c++ miniaudio)
+	else()
+		target_link_libraries(Retro80 objc dispatch gnustep-base gnustep-gui GL GLU m miniaudio)
+	endif()
 
 	# Бандл приложения GNUstep: Retro80.app/Retro80 + Retro80.app/Resources
 	set(RETRO80_APP_DIR ${CMAKE_CURRENT_BINARY_DIR}/Retro80.app)

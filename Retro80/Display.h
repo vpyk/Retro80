@@ -36,6 +36,10 @@
 
 - (void)draw:(BOOL)page;
 
+// Для вызова из потока эмуляции: выполняются в главном потоке
+- (void)setNeedsDisplayOnMainThread;
+- (void)resizeWindowOnMainThread;
+
 - (NSSize)size;
 
 @end

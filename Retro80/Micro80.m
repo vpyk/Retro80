@@ -32,7 +32,7 @@
 
 				if (self.ram.length != 2048)
 					menuItem.title = [[menuItem.title componentsSeparatedByString:@":"].firstObject
-						stringByAppendingFormat:@": %luK", (self.ram.length >> 10) - 2];
+						stringByAppendingFormat:@": %luK", (unsigned long) ((self.ram.length >> 10) - 2)];
 				else
 					menuItem.title = [menuItem.title componentsSeparatedByString:@":"].firstObject;
 
