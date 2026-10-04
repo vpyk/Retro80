@@ -72,6 +72,42 @@ static NSString *keyEquivalentName(NSString *key)
 
 		case NSRightArrowFunctionKey:
 			return @"→";
+
+		case '\r':
+		case '\n':
+		case 0x03:
+			return @"Enter";
+
+		case '\t':
+			return @"Tab";
+
+		case 0x1B:
+			return @"Esc";
+
+		case 0x08:
+		case 0x7F:
+			return @"Backspace";
+
+		case ' ':
+			return @"Space";
+
+		case NSInsertFunctionKey:
+			return @"Ins";
+
+		case NSDeleteFunctionKey:
+			return @"Del";
+
+		case NSHomeFunctionKey:
+			return @"Home";
+
+		case NSEndFunctionKey:
+			return @"End";
+
+		case NSPageUpFunctionKey:
+			return @"PgUp";
+
+		case NSPageDownFunctionKey:
+			return @"PgDn";
 	}
 
 	if (ch >= NSF1FunctionKey && ch <= NSF35FunctionKey)
