@@ -21,11 +21,36 @@
 
 @synthesize qwerty;
 
-#if defined(GNUSTEP) && !defined(_WIN32)
+#ifdef GNUSTEP
 
-// Таблицы kbdmap заданы в кодах клавиш macOS (kVK_*), а GNUstep на X11 отдаёт аппаратные
-// коды X11 (evdev: скан-код Linux + 8). Пары {код X11, код macOS} по положению клавиш.
-static const unsigned short x11KeyCodes[][2] = {
+// Таблицы kbdmap заданы в кодах клавиш macOS (kVK_*), а GNUstep отдаёт коды клавиш платформы:
+// на X11 — аппаратные коды X11 (evdev: скан-код Linux + 8), на Windows — коды виртуальных клавиш (VK).
+// Пары {код платформы, код macOS} по положению клавиш.
+
+#ifdef _WIN32
+
+// Enter на цифровой клавиатуре в Windows имеет тот же код VK, что и Return, поэтому [ПС] недоступна
+static const unsigned short platformKeyCodes[][2] = {
+	{0x1B, 53},																	// Esc
+	{0x70, 122}, {0x71, 120}, {0x72, 99}, {0x73, 118}, {0x74, 96}, {0x75, 97},	// F1-F6
+	{0x76, 98}, {0x77, 100}, {0x78, 101}, {0x79, 109}, {0x7A, 103}, {0x7B, 111},// F7-F12
+	{0xC0, 50}, {0x31, 18}, {0x32, 19}, {0x33, 20}, {0x34, 21}, {0x35, 23},		// ` 1 2 3 4 5
+	{0x36, 22}, {0x37, 26}, {0x38, 28}, {0x39, 25}, {0x30, 29},					// 6 7 8 9 0
+	{0xBD, 27}, {0xBB, 24}, {0x08, 51},											// - = Backspace
+	{0x09, 48}, {0x51, 12}, {0x57, 13}, {0x45, 14}, {0x52, 15}, {0x54, 17},		// Tab Q W E R T
+	{0x59, 16}, {0x55, 32}, {0x49, 34}, {0x4F, 31}, {0x50, 35},					// Y U I O P
+	{0xDB, 33}, {0xDD, 30}, {0xDC, 42},											// [ ] Backslash
+	{0x41, 0}, {0x53, 1}, {0x44, 2}, {0x46, 3}, {0x47, 5}, {0x48, 4},			// A S D F G H
+	{0x4A, 38}, {0x4B, 40}, {0x4C, 37}, {0xBA, 41}, {0xDE, 39}, {0x0D, 36},		// J K L ; ' Return
+	{0xE2, 10}, {0x5A, 6}, {0x58, 7}, {0x43, 8}, {0x56, 9}, {0x42, 11},			// <> Z X C V B
+	{0x4E, 45}, {0x4D, 46}, {0xBC, 43}, {0xBE, 47}, {0xBF, 44}, {0x20, 49},		// N M , . / Space
+	{0x24, 115}, {0x2E, 117},													// Home Delete
+	{0x25, 123}, {0x27, 124}, {0x28, 125}, {0x26, 126},							// ← → ↓ ↑
+};
+
+#else
+
+static const unsigned short platformKeyCodes[][2] = {
 	{9, 53},																// Esc
 	{67, 122}, {68, 120}, {69, 99}, {70, 118}, {71, 96}, {72, 97},			// F1-F6
 	{73, 98}, {74, 100}, {75, 101}, {76, 109}, {95, 103}, {96, 111},		// F7-F12
@@ -43,18 +68,20 @@ static const unsigned short x11KeyCodes[][2] = {
 
 #endif
 
+#endif
+
 // Код клавиши в кодах macOS
 static unsigned short macKeyCode(NSEvent *event)
 {
 	unsigned short keyCode = event.keyCode;
 
-#if defined(GNUSTEP) && !defined(_WIN32)
+#ifdef GNUSTEP
 	if (keyCode > 0xFF)
 		return keyCode;
 
-	for (size_t i = 0; i < sizeof(x11KeyCodes)/sizeof(x11KeyCodes[0]); i++)
-		if (x11KeyCodes[i][0] == keyCode)
-			return x11KeyCodes[i][1];
+	for (size_t i = 0; i < sizeof(platformKeyCodes)/sizeof(platformKeyCodes[0]); i++)
+		if (platformKeyCodes[i][0] == keyCode)
+			return platformKeyCodes[i][1];
 
 	// Остальные клавиши не совпадают ни с одним кодом macOS из kbdmap
 	return 0x100 | keyCode;
@@ -63,20 +90,39 @@ static unsigned short macKeyCode(NSEvent *event)
 #endif
 }
 
+// Модификаторы события
+static NSUInteger eventModifierFlags(NSEvent *event)
+{
+	NSUInteger flags = event.modifierFlags;
+
+#ifdef _WIN32
+	// Сервер win32 выдаёт нажатый Caps Lock как Shift, а включён ли Caps Lock, не передаёт
+	if (GetKeyState(VK_SHIFT) >= 0)
+		flags &= ~NSEventModifierFlagShift;
+
+	if (GetKeyState(VK_CAPITAL) & 1)
+		flags |= NSEventModifierFlagCapsLock;
+	else
+		flags &= ~NSEventModifierFlagCapsLock;
+#endif
+
+	return flags;
+}
+
 - (void)flagsChanged:(NSEvent *)theEvent
 {
-	if ((theEvent.modifierFlags & NSEventModifierFlagCommand) == 0)
+	if ((eventModifierFlags(theEvent) & NSEventModifierFlagCommand) == 0)
 	{
 		if (ignoreShift)
-			modifierFlags = (theEvent.modifierFlags & ~NSEventModifierFlagShift) | (modifierFlags & NSEventModifierFlagShift);
+			modifierFlags = (eventModifierFlags(theEvent) & ~NSEventModifierFlagShift) | (modifierFlags & NSEventModifierFlagShift);
 		else
-			modifierFlags = theEvent.modifierFlags;
+			modifierFlags = eventModifierFlags(theEvent);
 	}
 }
 
 - (void)keyDown:(NSEvent *)theEvent
 {
-	if ((theEvent.modifierFlags & NSEventModifierFlagCommand) != 0)
+	if ((eventModifierFlags(theEvent) & NSEventModifierFlagCommand) != 0)
 		return;
 
 	@synchronized (self)
@@ -94,15 +140,15 @@ static unsigned short macKeyCode(NSEvent *event)
 				{
 					if (chr2Map.length <= index || [chr2Map characterAtIndex:index] != [chr1Map characterAtIndex:index])
 					{
-						modifierFlags = theEvent.modifierFlags & ~NSEventModifierFlagShift; ignoreShift = YES;
+						modifierFlags = eventModifierFlags(theEvent) & ~NSEventModifierFlagShift; ignoreShift = YES;
 					}
 					else if (ignoreShift)
 					{
-						modifierFlags = (theEvent.modifierFlags & ~NSEventModifierFlagShift) | (modifierFlags & NSEventModifierFlagShift);
+						modifierFlags = (eventModifierFlags(theEvent) & ~NSEventModifierFlagShift) | (modifierFlags & NSEventModifierFlagShift);
 					}
 					else
 					{
-						modifierFlags = theEvent.modifierFlags;
+						modifierFlags = eventModifierFlags(theEvent);
 					}
 
 					if (index < 72)
@@ -113,7 +159,7 @@ static unsigned short macKeyCode(NSEvent *event)
 
 				else if ((index = [chr2Map rangeOfString:chr].location) != NSNotFound)
 				{
-					modifierFlags = theEvent.modifierFlags | NSEventModifierFlagShift; ignoreShift = YES;
+					modifierFlags = eventModifierFlags(theEvent) | NSEventModifierFlagShift; ignoreShift = YES;
 
 					if (index < 72)
 					{
@@ -125,7 +171,7 @@ static unsigned short macKeyCode(NSEvent *event)
 
 		else if ((index = [kbdmap indexOfObject:@(macKeyCode(theEvent))]) != NSNotFound)
 		{
-			modifierFlags = theEvent.modifierFlags;
+			modifierFlags = eventModifierFlags(theEvent);
 
 			if (index < 72)
 			{
@@ -137,7 +183,7 @@ static unsigned short macKeyCode(NSEvent *event)
 
 - (void) keyUp:(NSEvent*)theEvent
 {
-	if ((theEvent.modifierFlags & NSEventModifierFlagCommand) != 0)
+	if ((eventModifierFlags(theEvent) & NSEventModifierFlagCommand) != 0)
 		return;
 
 	@synchronized (self)
