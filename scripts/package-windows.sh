@@ -7,6 +7,7 @@
 #
 #   Retro80/
 #     Retro80.exe, Resources/   эмулятор (содержимое Retro80.app)
+#     LICENSE.txt               лицензия эмулятора
 #     *.dll                     зависимости эмулятора и бэкенда GNUstep
 #     GNUstep.conf              пути GNUstep внутри каталога
 #     lib/GNUstep/              бандл бэкенда, ресурсы gnustep-base/gui, шрифты и т.п.
@@ -36,6 +37,7 @@ rm -rf "$BUILD/dist"
 mkdir -p "$DIST/lib"
 
 cp -r "$BUILD/Retro80.app/." "$DIST/"
+cp "$ROOT/LICENSE" "$DIST/LICENSE.txt"
 cp -r "$PREFIX/lib/GNUstep" "$DIST/lib/"
 rm -rf "$DIST/lib/GNUstep/Applications" "$DIST/lib/GNUstep/WebApplications"
 
