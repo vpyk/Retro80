@@ -335,12 +335,18 @@ else()
 	set(RETRO80_APP_DIR ${CMAKE_CURRENT_BINARY_DIR}/Retro80.app)
 	set_target_properties(Retro80 PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${RETRO80_APP_DIR})
 
+	# Переменная Xcode в Info.plist; без подстановки она становится именем домена настроек
+	file(READ Retro80/Retro80-Info.plist RETRO80_INFO_PLIST)
+	string(REPLACE "$(PRODUCT_BUNDLE_IDENTIFIER)" "ru.uart.retro80" RETRO80_INFO_PLIST "${RETRO80_INFO_PLIST}")
+	file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/Retro80-Info.plist CONTENT "${RETRO80_INFO_PLIST}")
+	set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS Retro80/Retro80-Info.plist)
+
 	add_custom_command(
 			TARGET Retro80 POST_BUILD
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 			COMMAND ${CMAKE_COMMAND} -E make_directory ${RETRO80_APP_DIR}/Resources
 			COMMAND ${CMAKE_COMMAND} -E copy ${RETRO80_RESOURCES} ${RETRO80_APP_DIR}/Resources
-			COMMAND ${PLMERGE} ${RETRO80_APP_DIR}/Resources/Info-gnustep.plist Retro80/Retro80-Info.plist
+			COMMAND ${PLMERGE} ${RETRO80_APP_DIR}/Resources/Info-gnustep.plist ${CMAKE_CURRENT_BINARY_DIR}/Retro80-Info.plist
 	)
 
 	install(DIRECTORY ${RETRO80_APP_DIR} DESTINATION ${GNUSTEP_LOCAL_APPS} USE_SOURCE_PERMISSIONS)

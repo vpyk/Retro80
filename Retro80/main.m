@@ -14,9 +14,13 @@ int main(int argc, const char * argv[])
 	// ⌘ — Alt, Control — левый Ctrl ([УС]), ⌥ — правый Ctrl (РУС/ЛАТ); по умолчанию было бы
 	// ⌘ — левый Ctrl, ⌥ — Alt. Под Windows меню по умолчанию внутри окна, как принято в Windows.
 	// Всё переопределяется через defaults write или аргументы командной строки.
+	// При первом запуске модели ещё нет: без неё новый документ не создаётся, GNUstep показывает
+	// пустую панель «No information», а под Windows без окна не остаётся и меню.
 	@autoreleasepool
 	{
 		[NSUserDefaults.standardUserDefaults registerDefaults:@{
+			@"computer": @101,	// Радио-86РК
+
 #ifdef _WIN32
 			@"NSMenuInterfaceStyle": @"NSWindows95InterfaceStyle",
 			@"GSFirstCommandKey": @"Alt_R",
