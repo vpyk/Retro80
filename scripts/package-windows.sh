@@ -41,8 +41,10 @@ cp "$ROOT/LICENSE" "$DIST/LICENSE.txt"
 cp -r "$PREFIX/lib/GNUstep" "$DIST/lib/"
 rm -rf "$DIST/lib/GNUstep/Applications" "$DIST/lib/GNUstep/WebApplications"
 
-# Служебные программы GNUstep (без gdnc не загружается главное меню, gpbs — буфер обмена)
-cp "$PREFIX/bin/gdnc.exe" "$PREFIX/bin/gpbs.exe" "$PREFIX/bin/gdomap.exe" "$DIST/"
+# Служебные программы GNUstep (без gdnc не загружается главное меню, gpbs — буфер обмена,
+# make_services строит при первом запуске кэш служб в %USERPROFILE%\GNUstep\Library\Services,
+# без него не загружается Xib)
+cp "$PREFIX/bin/gdnc.exe" "$PREFIX/bin/gpbs.exe" "$PREFIX/bin/gdomap.exe" "$PREFIX/bin/make_services.exe" "$DIST/"
 
 # Настройки fontconfig (cairo): ищутся в etc/fonts рядом с DLL
 mkdir -p "$DIST/etc"
